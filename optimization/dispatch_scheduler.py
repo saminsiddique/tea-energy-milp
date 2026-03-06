@@ -2,44 +2,54 @@
 
 Reference: Section 2.5.2.1, Equations 8-10, Figure 4
 
-Dispatch modes (Eq 9):
-- Mode 0 (ℶ_0): P^HRES = PV + WT (excess to electrolyzer)
-- Mode A (ℶ_a): P^HRES = PV + WT + FC (fuel cell backup)
-- Mode B (ℶ_b): P^HRES = PV + WT + BM (biomass backup)
-- Mode C (ℶ_c): P^HRES = PV + WT + BM + FC (both backups)
+Corrected two-branch flowchart logic (h2_hres_corrected_flowchart.html):
 
-Dispatch logic (Figure 4):
-IF P_PV + P_WT >= P_D:
-    Excess → Electrolyzer → H2 storage/sales
-ELSE (deficit):
-    IF H2_available > H_min:
-        Activate Fuel Cell
-    ELIF Biomass_available:
-        Activate Biomass
-    ELSE:
-        Both FC + Biomass
+Decision 1: P^PV + P^WT >= P^D ?
+
+LEFT BRANCH (YES — Surplus S₁, ℶ₀=1):
+    Excess → Electrolyzer → H₂ production
+    Decision 2: H_h > H_min ?
+      YES → β Decision (optimizer chooses):
+        β=1: Sell surplus H₂, Biomass backup, FC OFF  → Mode B (ℶ_b=1)
+        β=0: FC from stored H₂, no H₂ sold            → Mode A (ℶₐ=1)
+             if still deficit → Biomass too            → Mode C (ℶ_c=1)
+      NO  → Biomass fallback only (no FC, no H₂ sold) → Mode B (ℶ_b=1)
+
+RIGHT BRANCH (NO — Deficit S₂, β is not evaluated):
+    No H₂ sales (all H₂ reserved for FC)
+    Activate FC first
+    Decision 3b: P^PV + P^WT + P^FC >= P^D ?
+      YES → Mode A (ℶₐ=1)
+      NO  → Also activate Biomass
+            Decision 3c: P^PV + P^WT + P^FC + P^BM >= P^D ?
+              YES → Mode C (ℶ_c=1)
+              NO  → Record UME
+
+Seasonal β heuristic (used when beta_profile not supplied):
+    Dry months (Jan, Feb, Jun, Jul, Aug, Sep): β=1 (sell H₂, biomass backup)
+    Wet months (Mar, Apr, May, Oct, Nov, Dec): β=0 (FC backup, no H₂ sale)
 """
 
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Dict, List, Optional, Tuple 
+from typing import Dict, List, Optional, Tuple
 
-import numpy as np 
+import numpy as np
 
 from components import (
     SolarPV,
     WindTurbine,
     Electrolyzer,
-    FuelCell, 
+    FuelCell,
     HydrogenStorage,
     BiomassGenerator,
-) 
+)
 
 
 class DispatchMode(Enum):
     """Dispatch modes from Equation 9."""
 
-    MODE_0 = auto()  # Renewables only
+    MODE_0 = auto()  # Renewables only (surplus, electrolyzer active)
     MODE_A = auto()  # Renewables + Fuel Cell
     MODE_B = auto()  # Renewables + Biomass
     MODE_C = auto()  # Renewables + FC + Biomass
@@ -50,17 +60,18 @@ class HourlyDispatch:
     """Dispatch result for a single hour."""
 
     mode: DispatchMode
-    p_pv: float  # kW
-    p_wind: float  # kW
-    p_fc: float  # kW
-    p_bm: float  # kW
-    p_elz: float  # kW (consumption)
-    p_ume: float  # kW (unmet)
+    p_pv: float     # kW
+    p_wind: float   # kW
+    p_fc: float     # kW
+    p_bm: float     # kW
+    p_elz: float    # kW (consumption)
+    p_ume: float    # kW (unmet)
     h2_produced: float  # kg
     h2_consumed: float  # kg
-    h2_sold: float  # kg
-    h2_level: float  # kg
+    h2_sold: float      # kg
+    h2_level: float     # kg
     feedstock_used: float  # kg
+    beta: int           # 0 or 1 — the β decision for this hour
 
 
 @dataclass
@@ -77,8 +88,34 @@ class DispatchResult:
     total_feedstock_used: float
 
 
+# Nairobi seasonal β heuristic (paper Table 3-4 / seasonal analysis)
+# Months where solar+wind surplus is high → sell H₂ (β=1)
+_DRY_MONTHS = {1, 2, 6, 7, 8, 9}   # Jan, Feb, Jun-Sep
+
+
+def _seasonal_beta(hour_of_year: int) -> int:
+    """Return β=1 for dry season months, β=0 for wet season months.
+
+    Args:
+        hour_of_year: Hour index (0-8759)
+
+    Returns:
+        1 for dry season (sell H₂), 0 for wet season (FC backup)
+    """
+    import pandas as pd
+    dt = pd.Timestamp("2023-01-01") + pd.Timedelta(hours=hour_of_year)
+    return 1 if dt.month in _DRY_MONTHS else 0
+
+
 class DispatchScheduler:
-    """Scheduler implementing dispatch logic from Figure 4."""
+    """Scheduler implementing corrected dispatch logic from Figure 4.
+
+    The two-branch flowchart is implemented in dispatch_hour().
+    β (beta) controls whether surplus H₂ is sold (β=1) or reserved
+    for the Fuel Cell (β=0) on the LEFT (surplus) branch.
+    On the RIGHT (deficit) branch, β is irrelevant — H₂ is always
+    reserved for power generation.
+    """
 
     def __init__(
         self,
@@ -101,55 +138,6 @@ class DispatchScheduler:
         self.h2_storage = h2_storage
         self.biomass = biomass
 
-    def determine_mode(
-        self,
-        renewable_power: float,
-        demand: float,
-        h2_available: float,
-        feedstock_available: float,
-    ) -> DispatchMode:
-        """Determine dispatch mode based on Figure 4 logic.
-
-        Args:
-            renewable_power: Available PV + Wind power (kW)
-            demand: Load demand (kW)
-            h2_available: H2 available above minimum SOC (kg)
-            feedstock_available: Biomass feedstock available (kg)
-
-        Returns:
-            DispatchMode for this hour
-        """
-        if renewable_power >= demand:
-            # Surplus - use Mode 0, excess to electrolyzer
-            return DispatchMode.MODE_0
-
-        # Deficit - need backup
-        deficit = demand - renewable_power
-
-        # Check H2 availability for fuel cell
-        h2_min_threshold = 0.5  # Minimum H2 to consider FC (kg)
-        fc_can_help = h2_available > h2_min_threshold
-
-        # Check biomass availability
-        bm_can_help = feedstock_available > 0 and self.biomass.capacity > 0
-
-        if fc_can_help and not bm_can_help:
-            return DispatchMode.MODE_A
-        elif bm_can_help and not fc_can_help:
-            return DispatchMode.MODE_B
-        elif fc_can_help and bm_can_help:
-            # Both available - check which is more appropriate
-            # Prioritize FC if deficit is small, BM if large
-            if deficit <= self.fuel_cell.capacity * 0.7:
-                return DispatchMode.MODE_A
-            elif deficit <= self.biomass.capacity * 0.7:
-                return DispatchMode.MODE_B
-            else:
-                return DispatchMode.MODE_C
-        else:
-            # Neither available - will have unmet demand
-            return DispatchMode.MODE_0
-
     def dispatch_hour(
         self,
         demand: float,
@@ -158,83 +146,202 @@ class DispatchScheduler:
         wind_speed: float,
         lhv_mj_kg: float,
         feedstock_available: float = float("inf"),
+        beta: int = 1,
     ) -> HourlyDispatch:
-        """Dispatch power for a single hour.
+        """Dispatch power for a single hour following the corrected flowchart.
 
-        Strategy: 
-        1. Biomass runs as Baseload (Max Capacity) to maximize reliable power and H2 production.
-        2. Renewables add to supply.
-        3. If Surplus -> Electrolyzer (H2).
-        4. If Deficit -> Fuel Cell (Backup).
+        Args:
+            demand: Load demand this hour (kW)
+            irradiance: Solar irradiance (W/m²)
+            temperature: Ambient temperature (°C)
+            wind_speed: Wind speed (m/s)
+            lhv_mj_kg: Biomass lower heating value for this hour (MJ/kg)
+            feedstock_available: Remaining biomass feedstock (kg)
+            beta: β decision for H₂ market on surplus branch.
+                  1 = sell surplus H₂ + biomass backup (dry season),
+                  0 = FC backup from stored H₂, no H₂ sold (wet season).
+
+        Returns:
+            HourlyDispatch with all power flows and H₂ levels.
         """
-        # 1. Biomass Baseload Dispatch
-        target_bm = self.biomass.capacity
-        bm_output = self.biomass.calculate_output(target_bm, lhv_mj_kg, feedstock_available)
-        p_bm = float(np.atleast_1d(bm_output.power_kw)[0])
-        feedstock_used = float(
-            np.atleast_1d(bm_output.details["feed_rate_kg_h"])[0]
-        )
-
-        # 2. Renewable Generation
+        # ── Step 1: Calculate renewable generation ──────────────────────────
         pv_output = self.pv.calculate_output(irradiance, temperature)
         p_pv = float(np.atleast_1d(pv_output.power_kw)[0])
 
         wind_output = self.wind.calculate_output(wind_speed)
         p_wind = float(np.atleast_1d(wind_output.power_kw)[0])
 
-        renewable_power = p_pv + p_wind
+        renewable_power = p_pv + p_wind   # P^PV + P^WT
 
-        # available H2
-        h2_available = self.h2_storage.available_to_discharge
-
-        # 3. Net Load Calculation
-        total_gen = p_bm + renewable_power
-        
+        # ── Initialise all outputs to zero ──────────────────────────────────
+        p_bm = 0.0
         p_fc = 0.0
         p_elz = 0.0
         p_ume = 0.0
         h2_produced = 0.0
         h2_consumed = 0.0
         h2_sold = 0.0
-        
-        mode = DispatchMode.MODE_B # Default to Biomass active
+        feedstock_used = 0.0
+        mode = DispatchMode.MODE_0
 
-        if total_gen >= demand:
-            # Surplus case
-            mode = DispatchMode.MODE_0 # Effectively Surplus Mode
-            excess = total_gen - demand
-            
+        # H₂ storage state
+        h2_available = self.h2_storage.available_to_discharge  # above SOC_min
+
+        # ════════════════════════════════════════════════════════════════════
+        # DECISION 1: P^PV + P^WT >= P^D  ?
+        # ════════════════════════════════════════════════════════════════════
+        if renewable_power >= demand:
+            # ────────────────────────────────────────────────────────────────
+            # LEFT BRANCH — Surplus (S₁)
+            # Demand is met by renewables; excess feeds the electrolyzer.
+            # ────────────────────────────────────────────────────────────────
+            mode = DispatchMode.MODE_0   # ℶ₀ = 1
+
+            excess = renewable_power - demand
+
+            # Run electrolyzer on excess renewable power
             if excess > 0:
                 elz_power = min(excess, self.electrolyzer.capacity)
-                # Check min load
-                if elz_power >= self.electrolyzer.capacity * self.electrolyzer.params.min_load_fraction:
+                min_load = (
+                    self.electrolyzer.capacity
+                    * self.electrolyzer.params.min_load_fraction
+                )
+                if elz_power >= min_load:
                     p_elz = elz_power
                     elz_output = self.electrolyzer.calculate_output(p_elz)
                     h2_produced = float(
                         np.atleast_1d(elz_output.details["h2_production_kg_h"])[0]
                     )
-                    
-                    _, storable_amount = self.h2_storage.can_charge(h2_produced)
-                    h2_sold = h2_produced - storable_amount
-        
-        else:
-            # Deficit case - Need Fuel Cell
-            mode = DispatchMode.MODE_C # Biomass + FC (since BM is already running)
-            deficit = demand - total_gen
-            
-            # Use FC
-            target_fc = min(deficit, self.fuel_cell.capacity)
-            fc_output = self.fuel_cell.calculate_output(target_fc, h2_available)
-            p_fc = float(np.atleast_1d(fc_output.power_kw)[0])
-            h2_consumed = float(
-                np.atleast_1d(fc_output.details["h2_consumption_kg_h"])[0]
-            )
-            
-            remaining = deficit - p_fc
-            if remaining > 0:
-                p_ume = remaining
 
-        # Update H2 storage
+            # DECISION 2: H_h > H_min?  (precondition for β decision)
+            h2_above_min = h2_available > 0  # available_to_discharge already above min
+
+            if h2_above_min:
+                # ── β DECISION ──────────────────────────────────────────────
+                if beta == 1:
+                    # β = 1 path: Sell surplus H₂, Biomass backup, FC OFF
+                    # (Dry season — abundant H₂ and renewables)
+                    _, storable = self.h2_storage.can_charge(h2_produced)
+                    h2_sold = max(h2_produced - storable, 0.0)
+
+                    # Biomass as backup for reliability
+                    # On the surplus side demand is already covered by renewables,
+                    # so biomass is called only if there is any remaining gap
+                    # (e.g. electrolyzer draws some extra load).
+                    gap = demand - renewable_power   # ≤ 0 on surplus side
+                    if gap > 0 and self.biomass.capacity > 0:
+                        bm_target = min(self.biomass.capacity, gap)
+                        bm_output = self.biomass.calculate_output(
+                            bm_target, lhv_mj_kg, feedstock_available
+                        )
+                        p_bm = float(np.atleast_1d(bm_output.power_kw)[0])
+                        feedstock_used = float(
+                            np.atleast_1d(bm_output.details["feed_rate_kg_h"])[0]
+                        )
+                        mode = DispatchMode.MODE_B  # ℶ_b = 1
+
+                        total_supply = renewable_power + p_bm
+                        if total_supply < demand:
+                            p_ume = demand - total_supply
+                    # else: no gap, demand fully met by renewables → MODE_0
+
+                else:
+                    # β = 0 path: FC backup from stored H₂, no H₂ sold
+                    # (Wet season — low renewables, H₂ needed for power)
+                    h2_sold = 0.0
+
+                    # FC provides supplemental power
+                    gap = demand - renewable_power   # ≤ 0 on surplus side
+                    if gap > 0 and h2_available > 0:
+                        target_fc = min(self.fuel_cell.capacity, gap)
+                        fc_output = self.fuel_cell.calculate_output(
+                            target_fc, h2_available
+                        )
+                        p_fc = float(np.atleast_1d(fc_output.power_kw)[0])
+                        h2_consumed = float(
+                            np.atleast_1d(fc_output.details["h2_consumption_kg_h"])[0]
+                        )
+
+                        if renewable_power + p_fc >= demand:
+                            mode = DispatchMode.MODE_A  # ℶₐ = 1
+                        else:
+                            # Add biomass if FC alone not enough
+                            remaining = demand - renewable_power - p_fc
+                            if self.biomass.capacity > 0:
+                                bm_target = min(self.biomass.capacity, remaining)
+                                bm_output = self.biomass.calculate_output(
+                                    bm_target, lhv_mj_kg, feedstock_available
+                                )
+                                p_bm = float(np.atleast_1d(bm_output.power_kw)[0])
+                                feedstock_used = float(
+                                    np.atleast_1d(bm_output.details["feed_rate_kg_h"])[0]
+                                )
+                            mode = DispatchMode.MODE_C  # ℶ_c = 1
+                            total = renewable_power + p_fc + p_bm
+                            if total < demand:
+                                p_ume = demand - total
+                    # else: no gap, demand met by renewables → MODE_0
+
+            else:
+                # H₂ ≤ H_min: Biomass fallback only (no FC, no H₂ sold)
+                h2_sold = 0.0
+                gap = demand - renewable_power
+                if gap > 0 and self.biomass.capacity > 0:
+                    bm_target = min(self.biomass.capacity, gap)
+                    bm_output = self.biomass.calculate_output(
+                        bm_target, lhv_mj_kg, feedstock_available
+                    )
+                    p_bm = float(np.atleast_1d(bm_output.power_kw)[0])
+                    feedstock_used = float(
+                        np.atleast_1d(bm_output.details["feed_rate_kg_h"])[0]
+                    )
+                    mode = DispatchMode.MODE_B
+                    if renewable_power + p_bm < demand:
+                        p_ume = demand - renewable_power - p_bm
+
+        else:
+            # ────────────────────────────────────────────────────────────────
+            # RIGHT BRANCH — Deficit (S₂)
+            # PV + WT cannot meet demand. β is NOT evaluated.
+            # All H₂ is reserved for FC power — no market sales.
+            # ────────────────────────────────────────────────────────────────
+            h2_sold = 0.0   # No H₂ sales on the deficit side
+            deficit = demand - renewable_power
+
+            # ── FC first (primary backup) ──────────────────────────────────
+            if h2_available > 0:
+                target_fc = min(deficit, self.fuel_cell.capacity)
+                fc_output = self.fuel_cell.calculate_output(target_fc, h2_available)
+                p_fc = float(np.atleast_1d(fc_output.power_kw)[0])
+                h2_consumed = float(
+                    np.atleast_1d(fc_output.details["h2_consumption_kg_h"])[0]
+                )
+
+            # Decision 3b: PV + WT + FC >= demand?
+            if renewable_power + p_fc >= demand:
+                mode = DispatchMode.MODE_A   # ℶₐ = 1
+                p_ume = max(demand - renewable_power - p_fc, 0.0)
+
+            else:
+                # FC not sufficient → Activate Biomass too
+                remaining = demand - renewable_power - p_fc
+                if self.biomass.capacity > 0:
+                    bm_target = min(self.biomass.capacity, remaining)
+                    bm_output = self.biomass.calculate_output(
+                        bm_target, lhv_mj_kg, feedstock_available
+                    )
+                    p_bm = float(np.atleast_1d(bm_output.power_kw)[0])
+                    feedstock_used = float(
+                        np.atleast_1d(bm_output.details["feed_rate_kg_h"])[0]
+                    )
+
+                # Decision 3c: PV + WT + FC + BM >= demand?
+                mode = DispatchMode.MODE_C   # ℶ_c = 1
+                total_supply = renewable_power + p_fc + p_bm
+                if total_supply < demand:
+                    p_ume = demand - total_supply
+
+        # ── Update H₂ storage (Equation 16) ────────────────────────────────
         storage_result = self.h2_storage.simulate_hour(
             h2_from_elz=h2_produced,
             h2_to_fc=h2_consumed,
@@ -255,6 +362,7 @@ class DispatchScheduler:
             h2_sold=storage_result["h2_to_market_kg"],
             h2_level=h2_level,
             feedstock_used=feedstock_used,
+            beta=beta,
         )
 
     def simulate_year(
@@ -265,6 +373,7 @@ class DispatchScheduler:
         wind_speed_profile: np.ndarray,
         lhv_profile: np.ndarray,
         annual_feedstock_kg: float = float("inf"),
+        beta_profile: Optional[np.ndarray] = None,
     ) -> DispatchResult:
         """Simulate dispatch for a full year.
 
@@ -273,8 +382,11 @@ class DispatchScheduler:
             irradiance_profile: Hourly irradiance (W/m²)
             temperature_profile: Hourly temperature (°C)
             wind_speed_profile: Hourly wind speed (m/s)
-            lhv_profile: Hourly LHV values (MJ/kg)
+            lhv_profile: Hourly biomass LHV (MJ/kg)
             annual_feedstock_kg: Total feedstock available for year
+            beta_profile: Optional array of β values (0 or 1) for each hour.
+                          If None, the seasonal heuristic is applied
+                          (β=1 in dry months, β=0 in wet months).
 
         Returns:
             DispatchResult with all hourly results and totals
@@ -282,13 +394,19 @@ class DispatchScheduler:
         # Reset storage to initial state
         self.h2_storage.reset()
 
+        hours = len(demand_profile)
+
+        # Build β profile if not supplied
+        if beta_profile is None:
+            beta_profile = np.array([_seasonal_beta(h) for h in range(hours)])
+
         # Track feedstock consumption
         feedstock_remaining = annual_feedstock_kg
 
         hourly_results = []
         mode_counts = {mode: 0 for mode in DispatchMode}
 
-        for h in range(len(demand_profile)):
+        for h in range(hours):
             result = self.dispatch_hour(
                 demand=demand_profile[h],
                 irradiance=irradiance_profile[h],
@@ -296,6 +414,7 @@ class DispatchScheduler:
                 wind_speed=wind_speed_profile[h],
                 lhv_mj_kg=lhv_profile[h],
                 feedstock_available=feedstock_remaining,
+                beta=int(beta_profile[h]),
             )
 
             hourly_results.append(result)
@@ -337,6 +456,9 @@ class DispatchScheduler:
         """
         total_hours = len(result.hourly)
 
+        beta_1_hours = sum(1 for r in result.hourly if r.beta == 1)
+        beta_0_hours = total_hours - beta_1_hours
+
         return {
             "mode_0_hours": result.mode_counts[DispatchMode.MODE_0],
             "mode_0_pct": result.mode_counts[DispatchMode.MODE_0] / total_hours * 100,
@@ -346,4 +468,6 @@ class DispatchScheduler:
             "mode_b_pct": result.mode_counts[DispatchMode.MODE_B] / total_hours * 100,
             "mode_c_hours": result.mode_counts[DispatchMode.MODE_C],
             "mode_c_pct": result.mode_counts[DispatchMode.MODE_C] / total_hours * 100,
+            "beta_1_hours": beta_1_hours,
+            "beta_0_hours": beta_0_hours,
         }

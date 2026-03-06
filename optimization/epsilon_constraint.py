@@ -251,6 +251,18 @@ class EpsilonConstraintOptimizer:
         # Map each hour to its block's binary
         y_bm = [y_bm_block[h // BM_BLOCK_SIZE] for h in range(self.hours)]
 
+        # β binary variables — enforce mutual exclusion between H₂ sales and FC
+        # (Flowchart Fig.4: on surplus branch β=1→sell H₂, FC OFF;
+        #                              β=0→FC backup, no H₂ sold)
+        # Use daily 24-hour blocks → 365 binaries (manageable solve time)
+        BETA_BLOCK_SIZE = 24
+        n_beta_blocks = (self.hours + BETA_BLOCK_SIZE - 1) // BETA_BLOCK_SIZE
+        beta_block = [
+            pulp.LpVariable(f"beta_b{b}", cat="Binary") for b in range(n_beta_blocks)
+        ]
+        # Map each hour to its daily block binary
+        beta = [beta_block[h // BETA_BLOCK_SIZE] for h in range(self.hours)]
+
         # Add constraints
 
         # PV and wind output constraints
@@ -324,6 +336,14 @@ class EpsilonConstraintOptimizer:
             # Realistic market can only absorb limited H2 per hour
             model += g_h[h] <= self.bounds.h2_max_sales_rate, f"h2_max_sales_{h}"
 
+            # β mutual-exclusion constraints (Flowchart Fig. 4):
+            # When β=1: H₂ may be sold, FC must be OFF
+            # When β=0: FC may run, H₂ sales must be zero
+            M_beta_h2 = self.bounds.h2_max_sales_rate          # upper bound on hourly H₂ sold
+            M_beta_fc = self.bounds.fuel_cell_max              # upper bound on FC output
+            model += g_h[h] <= beta[h] * M_beta_h2, f"beta_h2_{h}"
+            model += p_fc[h] <= (1 - beta[h]) * M_beta_fc, f"beta_fc_{h}"
+
         # CRITICAL FIX: Annual H2 sales limit (market constraint)
         # Local market has finite demand for H2
         model += pulp.lpSum(g_h) <= self.bounds.h2_max_annual_sales, "annual_h2_sales_limit"
@@ -352,6 +372,8 @@ class EpsilonConstraintOptimizer:
             "h2_level": h2_level,
             "y_bm": y_bm,
             "y_bm_block": y_bm_block,
+            "beta": beta,
+            "beta_block": beta_block,
         }
 
         return model, variables

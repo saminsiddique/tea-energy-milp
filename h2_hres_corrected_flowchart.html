@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>H₂-HRES Dispatch Flowchart — Corrected</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600;700&display=swap');
+
+  :root {
+    --bg:        #f5f4f0;
+    --paper:     #ffffff;
+    --ink:       #1a1a1a;
+    --ink-soft:  #555550;
+    --rule:      #d8d6cf;
+
+    --solar:     #c8760a;
+    --solar-bg:  #fef3e2;
+    --solar-bd:  #f0b04a;
+
+    --h2:        #1565a8;
+    --h2-bg:     #e8f1fb;
+    --h2-bd:     #7aacdf;
+
+    --bio:       #2a7a3b;
+    --bio-bg:    #eaf5ec;
+    --bio-bd:    #7ec48d;
+
+    --fc:        #6b2fa0;
+    --fc-bg:     #f3eafa;
+    --fc-bd:     #b07fd4;
+
+    --dec:       #b83000;
+    --dec-bg:    #fff0ea;
+    --dec-bd:    #e8896a;
+
+    --opt:       #1a6b3a;
+    --opt-bg:    #e4f5eb;
+    --opt-bd:    #5cb87a;
+
+    --recheck:   #8b1a1a;
+    --recheck-bg:#fdeaea;
+
+    --beta1:     #8a6500;
+    --beta1-bg:  #fdf5dc;
+    --beta1-bd:  #d4aa40;
+
+    --beta0:     #4a2080;
+    --beta0-bg:  #f0eaf8;
+    --beta0-bd:  #9b6dcc;
+
+    --nomarket:  #555550;
+    --nomarket-bg:#f0eeea;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    font-family: 'IBM Plex Sans', sans-serif;
+    color: var(--ink);
+    padding: 40px 20px 60px;
+  }
+
+  /* ── PAGE HEADER ── */
+  .page-header {
+    max-width: 1100px;
+    margin: 0 auto 40px;
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 20px;
+  }
+  .page-header h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+  .page-header p {
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+    margin-top: 4px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  /* ── MAIN CANVAS ── */
+  .canvas {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  /* ── GENERIC NODE STYLES ── */
+  .node {
+    border-radius: 6px;
+    padding: 12px 18px;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    position: relative;
+  }
+  .node-title {
+    font-weight: 700;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 5px;
+  }
+  .node-formula {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--ink-soft);
+    margin-top: 5px;
+    line-height: 1.6;
+  }
+  .flag-badge {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 3px;
+    margin: 3px 2px 0;
+    background: rgba(0,0,0,0.07);
+  }
+
+  /* ── ARROW ── */
+  .arrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 0;
+  }
+  .arrow-line {
+    width: 2px;
+    background: var(--rule);
+    height: 22px;
+  }
+  .arrow-head {
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid var(--rule);
+  }
+  .arrow-label {
+    font-size: 0.68rem;
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--ink-soft);
+    background: var(--bg);
+    padding: 0 4px;
+    margin-top: -2px;
+  }
+
+  /* ── DECISION DIAMOND ── */
+  .decision-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+  }
+  .decision-box {
+    background: var(--dec-bg);
+    border: 2px solid var(--dec-bd);
+    border-radius: 6px;
+    padding: 14px 22px;
+    text-align: center;
+    max-width: 520px;
+    width: 100%;
+  }
+  .decision-box .tag {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--dec);
+    margin-bottom: 5px;
+  }
+  .decision-box .question {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--ink);
+    line-height: 1.4;
+  }
+  .decision-box .formula {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--ink-soft);
+    margin-top: 6px;
+  }
+
+  /* ── SPLIT ROW ── */
+  .split-row {
+    display: flex;
+    width: 100%;
+    max-width: 1100px;
+    gap: 0;
+    align-items: flex-start;
+    position: relative;
+  }
+
+  /* horizontal connecting bar */
+  .split-row::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 62%;
+    height: 2px;
+    background: var(--rule);
+    z-index: 0;
+  }
+
+  .split-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    padding: 0 12px;
+  }
+
+  /* ── SECTION LABEL ── */
+  .side-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 4px 14px;
+    border-radius: 20px;
+    margin-bottom: 0;
+  }
+  .side-label.yes {
+    background: var(--solar-bg);
+    color: var(--solar);
+    border: 1px solid var(--solar-bd);
+  }
+  .side-label.no {
+    background: var(--recheck-bg);
+    color: var(--recheck);
+    border: 1px solid #e8aaaa;
+  }
+
+  /* ── NODE VARIANTS ── */
+  .n-solar  { background: var(--solar-bg);  border: 1.5px solid var(--solar-bd);  }
+  .n-h2     { background: var(--h2-bg);     border: 1.5px solid var(--h2-bd);     }
+  .n-bio    { background: var(--bio-bg);    border: 1.5px solid var(--bio-bd);    }
+  .n-fc     { background: var(--fc-bg);     border: 1.5px solid var(--fc-bd);     }
+  .n-opt    { background: var(--opt-bg);    border: 2px solid var(--opt-bd);      }
+  .n-recheck{ background: var(--recheck-bg);border: 1.5px solid #e8aaaa;          }
+  .n-beta1  { background: var(--beta1-bg);  border: 2px solid var(--beta1-bd);    }
+  .n-beta0  { background: var(--beta0-bg);  border: 2px solid var(--beta0-bd);    }
+  .n-nomarket{background: var(--nomarket-bg);border:1.5px solid #ccc;             }
+  .n-setup  { background: #f9f8f5;          border: 1.5px solid var(--rule);      }
+
+  .n-opt .node-title    { color: var(--opt);     }
+  .n-solar .node-title  { color: var(--solar);   }
+  .n-h2 .node-title     { color: var(--h2);      }
+  .n-bio .node-title    { color: var(--bio);      }
+  .n-fc .node-title     { color: var(--fc);       }
+  .n-beta1 .node-title  { color: var(--beta1);    }
+  .n-beta0 .node-title  { color: var(--beta0);    }
+  .n-recheck .node-title{ color: var(--recheck);  }
+
+  .wide  { width: 100%; max-width: 520px; }
+  .full  { width: 100%; max-width: 1100px; }
+
+  /* ── START / END OVALS ── */
+  .oval {
+    border-radius: 50px;
+    padding: 9px 36px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border: 2px solid var(--ink);
+    background: var(--ink);
+    color: #fff;
+  }
+
+  /* ── BETA SIDE-BY-SIDE ── */
+  .beta-pair {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+  }
+  .beta-pair > * { flex: 1; }
+
+  /* ── FINAL OUTPUTS ROW ── */
+  .outcomes-row {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+  }
+  .outcomes-row > * { flex: 1; }
+
+  /* ── SECTION DIVIDER ── */
+  .section-strip {
+    width: 100%;
+    max-width: 1100px;
+    background: var(--ink);
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 5px 16px;
+    border-radius: 3px;
+    margin: 18px 0 0;
+  }
+
+  /* ── DASHED CONNECTOR (H2 Sale dotted path) ── */
+  .arrow-line.dashed {
+    border-left: 2px dashed var(--beta1-bd);
+    width: 0;
+    background: none;
+  }
+
+  /* ── CALLOUT ── */
+  .callout {
+    width: 100%;
+    max-width: 1100px;
+    border-left: 4px solid var(--h2);
+    background: var(--h2-bg);
+    padding: 10px 16px;
+    border-radius: 0 6px 6px 0;
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    line-height: 1.6;
+  }
+  .callout strong { color: var(--ink); }
+
+  /* ── FEEDBACK ARROW (loop back) ── */
+  .feedback-note {
+    font-size: 0.72rem;
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--ink-soft);
+    border: 1px dashed var(--rule);
+    border-radius: 4px;
+    padding: 5px 12px;
+    text-align: center;
+  }
+
+  /* ── LEGEND ── */
+  .legend {
+    max-width: 1100px;
+    width: 100%;
+    margin-top: 36px;
+    border-top: 1px solid var(--rule);
+    padding-top: 18px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 0.72rem;
+    color: var(--ink-soft);
+  }
+  .legend-dot {
+    width: 12px; height: 12px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  /* spacing helpers */
+  .gap4  { height: 4px; }
+  .gap8  { height: 8px; }
+  .gap14 { height: 14px; }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>H₂-HRES Dispatch Scheduling — Corrected Flowchart</h1>
+  <p>Based on Fig. 4 — Mulumba & Farzaneh (2025) · Int. J. Hydrogen Energy 178, 151474</p>
+</div>
+
+<div class="canvas">
+
+  <!-- ══════════════════════════════════════════════════════
+       STAGE 0 — START & SETUP
+  ═══════════════════════════════════════════════════════ -->
+  <div class="oval">Start</div>
+  <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+  <div class="node n-setup wide" style="text-align:center">
+    <div class="node-title" style="color:var(--ink-soft)">Model Parameterization</div>
+    <div style="font-size:0.78rem;color:var(--ink-soft)">State variables · Technical constraints · Local meteorological &amp; load profile data</div>
+  </div>
+
+  <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+  <!-- Multi-objective setup box -->
+  <div class="node n-setup wide" style="text-align:center">
+    <div class="node-title" style="color:var(--ink-soft)">Multi-Objective Optimization Setup</div>
+    <div class="node-formula">min f₁(COE) = [TC − β·(Gᴴ·pᴴ)] / P<sup>HRES</sup>
+min f₂(UME)   subject to:  ε_min ≤ ε ≤ ε_max</div>
+  </div>
+
+  <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+  <!-- HRES Output block -->
+  <div class="node n-solar wide" style="text-align:center">
+    <div class="node-title">HRES Output {PV, WT}</div>
+    <div style="font-size:0.78rem">Primary power from Solar PV + Wind Turbine is calculated for this hour.</div>
+    <div class="node-formula">P_h^PV = f(G_h, T_h)   ·   P_h^WT = f(v_h)</div>
+  </div>
+
+  <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+  <!-- ══════════════════════════════════════════════════════
+       DECISION 1 — Load Balance
+  ═══════════════════════════════════════════════════════ -->
+  <div class="section-strip">Decision 1 — Load Balance Check (Situation S₀)</div>
+  <div class="gap8"></div>
+
+  <div class="decision-wrap">
+    <div class="decision-box">
+      <div class="tag">◆ Decision Point</div>
+      <div class="question">Can PV + Wind alone meet the electrical demand this hour?</div>
+      <div class="formula">P_h^PV + P_h^WT  ≥  P_h^D  ?</div>
+    </div>
+  </div>
+
+  <div class="gap8"></div>
+
+  <!-- ══════════════════════════════════════════════════════
+       TWO-COLUMN SPLIT
+  ═══════════════════════════════════════════════════════ -->
+  <div class="split-row">
+
+    <!-- ─────────────── LEFT COLUMN — YES / S1 ─────────────── -->
+    <div class="split-col">
+      <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+      <div class="side-label yes">✓ YES — Surplus Generation (S₁)</div>
+      <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+      <!-- Hydrogen Production -->
+      <div class="node n-h2 wide">
+        <div class="node-title">Hydrogen Production via PEM Electrolyzer</div>
+        <div style="font-size:0.78rem">Surplus electricity powers the electrolyzer. Water is split into H₂ + O₂. Hydrogen is stored in high-pressure tanks.</div>
+        <div class="node-formula">Q_h^ELZ = (η_ELZ × P_h^ELZ) / (2F × V_rev)
+H_h = H_{h-1} + Q_h^ELZ − Q_h^FC − G_h^H</div>
+        <div style="margin-top:7px">
+          <span class="flag-badge" style="background:#d6eaf8;color:var(--h2)">ℶ₀ = 1</span>
+          <span class="flag-badge">ℶₐ = 0</span>
+          <span class="flag-badge">ℶ_b = 0</span>
+          <span class="flag-badge">ℶ_c = 0</span>
+        </div>
+      </div>
+
+      <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+      <!-- Decision 2 — Hydrogen Level -->
+      <div class="decision-box wide">
+        <div class="tag">◆ Decision 2 — Hydrogen Reserve Check</div>
+        <div class="question">Is hydrogen storage above the minimum reserve?</div>
+        <div class="formula">H_h  &gt;  H_min  ?</div>
+      </div>
+      <div style="font-size:0.68rem;color:var(--ink-soft);font-style:italic;text-align:center;margin-top:4px;max-width:360px">
+        This is only a <strong>precondition</strong>. The β decision below is what actually chooses the path.
+      </div>
+
+      <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div><div class="arrow-label">YES — H₂ available</div></div>
+
+      <!-- ── BETA DECISION ── -->
+      <div class="section-strip" style="max-width:500px;font-size:0.62rem">
+        β Decision — Optimizer chooses based on COE minimization
+      </div>
+      <div class="gap8"></div>
+
+      <div class="beta-pair" style="max-width:500px">
+
+        <!-- β = 1 -->
+        <div class="node n-beta1">
+          <div class="node-title">β = 1 · H₂ Sale</div>
+          <div style="font-size:0.75rem;line-height:1.5">
+            <strong>When:</strong> Dry season — high solar &amp; wind, abundant H₂, good market price.<br><br>
+            <strong>Action:</strong> Surplus hydrogen is sold to local market (fertilizer production priority).<br><br>
+            <strong>Power backup:</strong> <span style="color:var(--bio);font-weight:600">Biomass generator</span> handles remaining demand.<br>
+            Fuel Cell is <strong>NOT activated</strong> here.<br><br>
+            <strong>COE effect:</strong> Revenue reduces total cost.
+          </div>
+          <div class="node-formula">f₁(COE) = [TC − 1·(Gᴴ·pᴴ)] / P^HRES
+Line style: ········· (dotted)</div>
+        </div>
+
+        <!-- β = 0 -->
+        <div class="node n-beta0">
+          <div class="node-title">β = 0 · FC Generation</div>
+          <div style="font-size:0.75rem;line-height:1.5">
+            <strong>When:</strong> Wet season — low renewables, low biomass LHV, H₂ needed for power.<br><br>
+            <strong>Action:</strong> Stored hydrogen is fed into the PEM Fuel Cell to generate electricity.<br><br>
+            <strong>No H₂ is sold</strong> to the market.<br><br>
+            Checks if PV + WT + FC now covers demand.
+          </div>
+          <div class="node-formula">P_h^FC = V_cell · I_cell_h · N_fc
+Q_h^FC = P_h^FC / (2F·V_cell·N_fc)
+Line style: —————— (solid)</div>
+          <div style="margin-top:7px">
+            <span class="flag-badge">ℶ₀ = 0</span>
+            <span class="flag-badge" style="background:#ede0f7;color:var(--fc)">ℶₐ = 1</span>
+            <span class="flag-badge">ℶ_b = 0</span>
+            <span class="flag-badge">ℶ_c = 0</span>
+          </div>
+        </div>
+
+      </div><!-- end beta-pair -->
+
+      <div class="gap8"></div>
+
+      <!-- Arrow from β=1 going to Biomass (LEFT path) -->
+      <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+      <!-- Biomass Generation — LEFT SIDE (comes from β=1 path AND H_h ≤ H_min path) -->
+      <div class="node n-bio wide" style="max-width:500px">
+        <div class="node-title">Biomass Generation</div>
+        <div style="font-size:0.75rem;line-height:1.5">
+          Activated on the <strong>LEFT side</strong> in two cases:<br>
+          <span style="color:var(--beta1);font-weight:600">① β = 1 path:</span> Biomass is the only backup (FC is OFF, H₂ is being sold).<br>
+          <span style="color:var(--h2-soft,#555);font-weight:600">② H_h ≤ H_min:</span> Not enough H₂, so biomass is the fallback.
+        </div>
+        <div class="node-formula">P_h^BM = Q_h^B · η_st
+Q_h^B  = B_h · LHV · (1 − e_Ls)
+LHV: 17.5 MJ/kg (dry) → 14.3 MJ/kg (wet)</div>
+      </div>
+
+      <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+      <!-- Decision 3a — PV+WT+BM check -->
+      <div class="decision-box wide" style="max-width:500px;border-color:var(--bio-bd);background:var(--bio-bg)">
+        <div class="tag" style="color:var(--bio)">◆ Decision 3a — Left-side Biomass Check</div>
+        <div class="question">Can PV + Wind + Biomass meet demand?</div>
+        <div class="formula">P_h^PV + P_h^WT + P_h^BM  ≥  P_h^D  ?</div>
+      </div>
+
+      <div class="gap8"></div>
+
+      <!-- Outcomes for left -->
+      <div class="outcomes-row" style="max-width:500px">
+        <div class="node n-opt" style="text-align:center">
+          <div class="node-title">✓ Optimal Solution</div>
+          <div style="font-size:0.75rem">Demand met by PV + WT + Biomass.</div>
+          <div style="margin-top:6px">
+            <span class="flag-badge" style="background:#d5f0e0;color:var(--opt)">ℶ_b = 1</span>
+          </div>
+          <div class="node-formula" style="margin-top:5px">ℶ₀=0 · ℶₐ=0 · ℶ_b=1 · ℶ_c=0</div>
+        </div>
+        <div class="node n-recheck" style="text-align:center">
+          <div class="node-title">↺ Re-check</div>
+          <div style="font-size:0.75rem">Still not enough. Record UME. Loop back to optimizer.</div>
+          <div class="node-formula">UME ↑ · Adjust ε · Retry</div>
+        </div>
+      </div>
+
+    </div><!-- end LEFT column -->
+
+    <!-- ─────────────── RIGHT COLUMN — NO / S2 ─────────────── -->
+    <div class="split-col">
+      <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+      <div class="side-label no">✗ NO — Demand Deficit (S₂)</div>
+      <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+      <!-- NO H2 SALES — this is the key correction -->
+      <div class="node n-nomarket wide" style="border-left:4px solid #888;text-align:center">
+        <div class="node-title" style="color:var(--nomarket)">⊘ No H₂ Sales</div>
+        <div style="font-size:0.78rem;line-height:1.5">On this side, <strong>β is not evaluated at all.</strong><br>
+        The system is in deficit — all hydrogen is reserved for power generation.<br>
+        Market participation is <strong>automatically disabled</strong> (β = 0 implied).</div>
+      </div>
+
+      <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+      <!-- FC activated right side -->
+      <div class="node n-fc wide">
+        <div class="node-title">H₂ for Electricity — Fuel Cell (FC)</div>
+        <div style="font-size:0.78rem;line-height:1.5">Stored hydrogen is fed into the PEM Fuel Cell to generate electricity and fill the demand gap. This is the <strong>primary backup</strong> on the deficit side.</div>
+        <div class="node-formula">P_h^FC = V_cell · I_cell_h · N_fc
+Q_h^FC = P_h^FC / (2F · V_cell · N_fc)</div>
+      </div>
+
+      <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+      <!-- Decision 3b right side -->
+      <div class="decision-box wide" style="border-color:var(--fc-bd);background:var(--fc-bg)">
+        <div class="tag" style="color:var(--fc)">◆ Decision 3b — FC Backup Check</div>
+        <div class="question">Can PV + Wind + Fuel Cell meet demand?</div>
+        <div class="formula">P_h^PV + P_h^WT + P_h^FC  ≥  P_h^D  ?</div>
+      </div>
+
+      <div class="gap8"></div>
+
+      <!-- YES → optimal, NO → need biomass too -->
+      <div class="outcomes-row" style="margin-bottom:0">
+        <div class="node n-opt" style="text-align:center">
+          <div class="node-title">✓ Optimal Solution</div>
+          <div style="font-size:0.75rem">Demand met by PV + WT + FC.</div>
+          <div style="margin-top:6px">
+            <span class="flag-badge" style="background:#ede0f7;color:var(--fc)">ℶₐ = 1</span>
+          </div>
+          <div class="node-formula">ℶ₀=0 · ℶₐ=1 · ℶ_b=0 · ℶ_c=0</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:0;flex:1">
+          <div style="font-size:0.68rem;font-family:'IBM Plex Mono',monospace;color:var(--ink-soft);margin-bottom:4px">NO → add Biomass</div>
+          <!-- Biomass right side -->
+          <div class="node n-bio" style="width:100%">
+            <div class="node-title">Activate Biomass Too</div>
+            <div style="font-size:0.73rem">Both FC AND Biomass are now active simultaneously to cover the large deficit.</div>
+            <div class="node-formula">P_h^BM = Q_h^B · η_st</div>
+          </div>
+          <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+          <!-- Decision 3c — full check -->
+          <div class="decision-box" style="border-color:var(--bio-bd);background:var(--bio-bg);width:100%">
+            <div class="tag" style="color:var(--bio)">◆ Decision 3c — Full Check</div>
+            <div class="question">Can PV + WT + FC + Biomass meet demand?</div>
+            <div class="formula">P_h^PV + P_h^WT + P_h^FC + P_h^BM  ≥  P_h^D  ?</div>
+          </div>
+          <div class="gap8"></div>
+          <div class="outcomes-row">
+            <div class="node n-opt" style="text-align:center">
+              <div class="node-title">✓ Optimal</div>
+              <div style="font-size:0.72rem">All sources active.</div>
+              <div style="margin-top:5px">
+                <span class="flag-badge" style="background:#d5f0e0;color:var(--opt)">ℶ_c = 1</span>
+              </div>
+              <div class="node-formula" style="font-size:0.65rem">ℶ₀=0·ℶₐ=0·ℶ_b=0·ℶ_c=1</div>
+            </div>
+            <div class="node n-recheck" style="text-align:center">
+              <div class="node-title">↺ Re-check</div>
+              <div style="font-size:0.72rem">All exhausted. Record UME. Loop back.</div>
+              <div class="node-formula">UME ↑ · Retry</div>
+            </div>
+          </div>
+        </div>
+      </div><!-- end right outcomes -->
+
+    </div><!-- end RIGHT column -->
+  </div><!-- end split-row -->
+
+  <!-- ══════════════════════════════════════════════════════
+       FEEDBACK LOOP & ε-CONSTRAINT OPTIMIZER
+  ═══════════════════════════════════════════════════════ -->
+  <div class="gap14"></div>
+  <div class="node n-setup full" style="text-align:center;border:2px solid var(--ink)">
+    <div class="node-title" style="color:var(--ink)">ε-Constraint MILP Optimizer — For Min COE vs Max Reliability</div>
+    <div style="font-size:0.78rem;color:var(--ink-soft);margin-top:4px">
+      All Re-check paths feed back here. The optimizer adjusts component sizing and ε bound, then re-runs the entire dispatch loop.
+      The Pareto front is built by varying ε across many iterations.
+    </div>
+    <div class="node-formula" style="margin-top:6px">
+      [optimization feedback] → HRES Output {PV, WT} → Load Balance → … → Optimum Output Values
+    </div>
+  </div>
+
+  <div class="gap14"></div>
+
+  <!-- ══════════════════════════════════════════════════════
+       KEY CORRECTION CALLOUT
+  ═══════════════════════════════════════════════════════ -->
+  <div class="callout">
+    <strong>Key correction from previous version:</strong>
+    The RIGHT side (Demand Deficit / S₂) does <em>not</em> contain a β decision at all.
+    The paper's Fig. 4 explicitly shows a "No H₂ Sales" box on the right side — meaning β is irrelevant there.
+    β only lives on the LEFT side (Surplus / S₁), after hydrogen has been produced.
+    The FC being "stopped" when β = 1 is correct behaviour: on the surplus side,
+    <strong>biomass replaces the FC as backup</strong> when hydrogen is being sold.
+  </div>
+
+  <div class="gap14"></div>
+
+  <!-- ══════════════════════════════════════════════════════
+       FLAG SUMMARY TABLE
+  ═══════════════════════════════════════════════════════ -->
+  <div class="section-strip">Unit Commitment Flags — Summary</div>
+  <div class="gap8"></div>
+
+  <div style="width:100%;max-width:1100px;overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:0.78rem;background:white;border-radius:6px;overflow:hidden;border:1px solid var(--rule)">
+      <thead>
+        <tr style="background:var(--ink);color:#fff">
+          <th style="padding:10px 14px;text-align:left;font-weight:600">Flag</th>
+          <th style="padding:10px 14px;text-align:left;font-weight:600">Value</th>
+          <th style="padding:10px 14px;text-align:left;font-weight:600">Side</th>
+          <th style="padding:10px 14px;text-align:left;font-weight:600">Condition</th>
+          <th style="padding:10px 14px;text-align:left;font-weight:600">Active Sources</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="background:var(--h2-bg)">
+          <td style="padding:9px 14px;font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--h2)">ℶ₀</td>
+          <td style="padding:9px 14px;font-family:'IBM Plex Mono',monospace">1</td>
+          <td style="padding:9px 14px;color:var(--solar);font-weight:600">LEFT (S₁)</td>
+          <td style="padding:9px 14px">PV + WT ≥ demand → surplus → run electrolyzer</td>
+          <td style="padding:9px 14px;font-family:'IBM Plex Mono',monospace">PV + WT + Electrolyzer</td>
+        </tr>
+        <tr>
+          <td style="padding:9px 14px;font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--fc)">ℶₐ</td>
+          <td style="padding:9px 14px;font-family:'IBM Plex Mono',monospace">1</td>
+          <td style="padding:9px 14px;color:var(--recheck);font-weight:600">RIGHT (S₂)</td>
+          <td style="padding:9px 14px">PV + WT &lt; demand → FC backup enough</td>
+          <td style="padding:9px 14px;font-family:'IBM Plex Mono',monospace">PV + WT + FC</td>
+        </tr>
+        <tr style="background:var(--bio-bg)">
+          <td style="padding:9px 14px;font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--bio)">ℶ_b</td>
+          <td style="padding:9px 14px;font-family:'IBM Plex Mono',monospace">1</td>
+          <td style="padding:9px 14px;color:var(--solar);font-weight:600">LEFT (S₁)</td>
+          <td style="padding:9px 14px">Surplus side — β=1 (H₂ sold) OR H_h ≤ H_min → biomass backup (no FC)</td>
+          <td style="padding:9px 14px;font-family:'IBM Plex Mono',monospace">PV + WT + Biomass</td>
+        </tr>
+        <tr>
+          <td style="padding:9px 14px;font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--ink)">ℶ_c</td>
+          <td style="padding:9px 14px;font-family:'IBM Plex Mono',monospace">1</td>
+          <td style="padding:9px 14px;color:var(--recheck);font-weight:600">RIGHT (S₂)</td>
+          <td style="padding:9px 14px">Deficit side — FC + Biomass both needed</td>
+          <td style="padding:9px 14px;font-family:'IBM Plex Mono',monospace">PV + WT + FC + Biomass</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="gap14"></div>
+
+  <!-- ══════════════════════════════════════════════════════
+       SEASONAL NOTE
+  ═══════════════════════════════════════════════════════ -->
+  <div style="width:100%;max-width:1100px;display:flex;gap:10px">
+
+    <div class="node" style="flex:1;background:#fef9ed;border:1.5px solid #e8c96a">
+      <div class="node-title" style="color:#7a5500">☀ Dry Season (Jan, Feb, Sep)</div>
+      <div style="font-size:0.75rem;line-height:1.6">
+        High solar + wind → surplus electricity → heavy electrolyzer use → H₂ abundant.<br>
+        High biomass LHV (17.5 MJ/kg) → biomass efficient.<br>
+        <strong>Optimizer chooses β = 1</strong> → sell H₂ + biomass as backup.<br>
+        COE: $0.452 – $0.494/kWh
+      </div>
+    </div>
+
+    <div class="node" style="flex:1;background:#edf4fb;border:1.5px solid #7aacdf">
+      <div class="node-title" style="color:#0d4a80">🌧 Wet / Rainy Season (May, Dec)</div>
+      <div style="font-size:0.75rem;line-height:1.6">
+        Low solar + wind → less surplus → less H₂ produced.<br>
+        Low biomass LHV (14.3 MJ/kg) → biomass less efficient.<br>
+        <strong>Optimizer chooses β = 0</strong> → use H₂ in FC for reliability.<br>
+        COE: $0.511/kWh
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════
+       LEGEND
+  ═══════════════════════════════════════════════════════ -->
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--solar-bd)"></div>PV / Wind (Primary)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--h2-bd)"></div>Hydrogen / Electrolyzer</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--fc-bd)"></div>Fuel Cell</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--bio-bd)"></div>Biomass Generator</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--beta1-bd)"></div>β = 1 (H₂ Sale)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--beta0-bd)"></div>β = 0 (FC Power)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ccc"></div>No H₂ Sales (Right side)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--opt-bd)"></div>Optimal Solution</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#e8aaaa"></div>Re-check / UME</div>
+  </div>
+
+</div><!-- end canvas -->
+</body>
+</html>
