@@ -219,10 +219,14 @@ class DispatchScheduler:
             if h2_above_min:
                 # ── β DECISION ──────────────────────────────────────────────
                 if beta == 1:
-                    # β = 1 path: Sell surplus H₂, Biomass backup, FC OFF
+                    # β = 1 path: Sell H₂ from storage up to market rate, FC OFF
                     # (Dry season — abundant H₂ and renewables)
-                    _, storable = self.h2_storage.can_charge(h2_produced)
-                    h2_sold = max(h2_produced - storable, 0.0)
+                    # Sell from available stored H₂ up to the hourly market rate limit.
+                    # This matches the MILP constraint h2_max_sales_rate = 0.5 kg/h.
+                    # New production (h2_produced) goes into storage FIRST via simulate_hour;
+                    # we sell from the current available balance — NOT just overflow.
+                    H2_MARKET_RATE = 0.5  # kg/hour (mirrors CapacityBounds.h2_max_sales_rate)
+                    h2_sold = min(h2_available, H2_MARKET_RATE)
 
                     # Biomass as backup for reliability
                     # On the surplus side demand is already covered by renewables,
