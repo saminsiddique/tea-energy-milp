@@ -1,0 +1,13 @@
+Parameter,Value,Unit,Source
+Location,Embakasi Pipeline Estate Nairobi Kenya,—,Section 3.1
+Latitude,-1.3206,degrees (South),—
+Longitude,36.8939,degrees,—
+Altitude,1795,m above sea level,—
+Timezone,UTC+3 (East Africa Time),—,—
+Met Data Source,NASA POWER API (with synthetic fallback),—,Section 6.1
+Peak Solar Irradiance,1290,W/m²,Section 3.1
+Average Solar Irradiance,479,W/m²,Section 3.1
+Peak Wind Speed (50m),11.3,m/s,Section 3.1
+Average Wind Speed (50m),3.69,m/s,Section 3.1
+Simulation Year,2023,—,—
+Hours per Year,8760,—,—

@@ -1,0 +1,10 @@
+Land Cover Class,Area (ha),Yield (ton/ha),Biomass Type
+Grassland,150000,8.5,grass
+Shrubland,80000,6.0,grass
+Cropland,120000,4.5,grass
+Forest,45000,12.0,wood
+Woodland,35000,10.0,wood
+Wetland,20000,5.0,grass
+Urban,100000,0.0,none
+Barren,50000,0.0,none
+Collection Efficiency: 15%,,,

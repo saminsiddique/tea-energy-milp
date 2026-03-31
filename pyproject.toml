@@ -22,6 +22,7 @@ dependencies = [
     "tqdm>=4.65.0",
     "pyarrow>=14.0.0",
     "highspy>=1.13.1",
+    "gurobipy>=13.0.0",
 ]
 
 [project.optional-dependencies]

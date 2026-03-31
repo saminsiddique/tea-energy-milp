@@ -1,0 +1,17 @@
+Parameter,Value,Unit,Reference
+Thermal Efficiency (Steam Rankine),0.35 (35%),fraction,Eq. 17-21
+Minimum Operating Load,0.30 (30%),fraction,—
+LHV (Dry Season),17.5,MJ/kg,Table 3
+LHV (Wet Season),14.3,MJ/kg,Table 3
+Wood:Grass Mix Ratio,1:10,—,Table 3
+Wood Fraction,0.091,fraction,—
+Grass Fraction,0.909,fraction,—
+Grass Available,19315584,ton/year,Table 3
+Wood Available,1622350,ton/year,Table 3
+Heat Loss - Fuel Moisture (e_fm),0.05,fraction,Eq. 21
+Heat Loss - Unburned (e_uc),0.02,fraction,Eq. 21
+Heat Loss - Dry Gas (e_dg),0.08,fraction,Eq. 21
+Heat Loss - Latent Heat (e_lh),0.03,fraction,Eq. 21
+Heat Loss - Moisture in Air (e_ma),0.01,fraction,Eq. 21
+Heat Loss - Manufacturing (e_mfc),0.02,fraction,Eq. 21
+Total Heat Loss (e_Ls),0.21,fraction,Eq. 21

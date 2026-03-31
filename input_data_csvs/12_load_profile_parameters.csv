@@ -1,0 +1,19 @@
+Parameter,Value,Unit,Reference
+Total Annual Demand,127800,kWh (127.8 MWh),Section 3.1
+Number of Households,70,—,Section 3.1
+Number of Buildings,3 (7-story each),—,Section 3.1
+Average Hourly Load,14.59,kW,Derived (127800/8760)
+Peak-to-Base Ratio,2.5,—,Section 3.1
+Morning Peak Hours,8-11 AM,—,—
+Evening Peak Hours,20-22 (8-10 PM),—,—
+Overnight (0-5 AM) Multiplier,0.6,—,—
+Early Morning (6-7 AM) Multiplier,0.9,—,—
+Morning Peak (8-11 AM) Multiplier,1.4,—,—
+Midday (12-17) Multiplier,1.0,—,—
+Pre-Evening (18-19) Multiplier,1.2,—,—
+Evening Peak (20-22) Multiplier,1.5,—,—
+Late Evening (23) Multiplier,1.0,—,—
+Weekend Adjustment,+10%,—,—
+Cold/Dry Season (Jun-Aug) Adjustment,+5%,—,—
+Hot Dry Season (Jan-Feb) Adjustment,+2%,—,—
+Random Noise,±10%,—,seed=42

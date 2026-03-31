@@ -135,8 +135,8 @@ def run_all_scenarios(year: int = 2023):
 
 def run_optimization(
     n_pareto_points: int = 10,
-    time_limit: int = 300,
-    gap: float = 0.02,
+    time_limit: int = 600,
+    gap: float = 0.005,
     solver_verbose: bool = True,
 ):
     """Run epsilon-constraint multi-objective optimization."""
@@ -469,14 +469,14 @@ Examples:
     parser.add_argument(
         "--time-limit",
         type=int,
-        default=300,
-        help="Max seconds per MILP solve (default: 300)",
+        default=600,
+        help="Max seconds per MILP solve (default: 600)",
     )
     parser.add_argument(
         "--gap",
         type=float,
-        default=0.02,
-        help="Relative optimality gap tolerance (default: 0.02 = 2%%)",
+        default=0.005,
+        help="Relative optimality gap tolerance (default: 0.005 = 0.5%%)",
     )
     parser.add_argument(
         "--solver-verbose",

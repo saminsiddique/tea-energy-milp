@@ -1,0 +1,9 @@
+Component,Min Capacity,Max Capacity,Unit,Paper Optimal
+Solar PV,0.0,100.0,kW,41.8 kW
+Wind Turbine,0.0,80.0,kW,30.1 kW
+Electrolyzer,0.0,100.0,kW,40.3 kW
+Fuel Cell,0.0,50.0,kW,15.1 kW
+H2 Storage,0.0,300.0,kg,~100 kg
+Biomass,0.0,80.0,kW,27.4 kW
+H2 Max Sales Rate,—,0.5,kg/hour,—
+H2 Max Annual Sales,—,400.0,kg/year,—

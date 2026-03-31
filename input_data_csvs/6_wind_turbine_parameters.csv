@@ -1,0 +1,8 @@
+Parameter,Value,Unit,Reference
+Cut-in Speed,3.0,m/s,Eq. 12
+Rated Speed,12.0,m/s,Eq. 12
+Cut-out Speed,25.0,m/s,Eq. 12
+Hub Height,50.0,m,Section 3.1
+Reference Height (data),10.0,m,—
+Wind Shear Exponent,0.14,—,Open terrain
+Power Curve,Cubic (v_cut_in to v_rated),—,Eq. 12
