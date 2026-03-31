@@ -33,13 +33,13 @@ class CapacityBounds:
 
     pv_min: float = 0.0
     pv_max: float = 150.0      # ~3x paper optimal (41.8 kW)
-    wind_min: float = 5.0       # HRES design: must include wind
+    wind_min: float = 10.0      # HRES design: must include wind
     wind_max: float = 150.0    # ~3x paper optimal (30.1 kW)
-    electrolyzer_min: float = 5.0  # HRES design: must include electrolyzer
+    electrolyzer_min: float = 10.0  # HRES design: must include electrolyzer
     electrolyzer_max: float = 150.0  # ~3x paper optimal (40.3 kW)
-    fuel_cell_min: float = 5.0      # HRES design: must include fuel cell
+    fuel_cell_min: float = 10.0     # HRES design: FC is primary backup
     fuel_cell_max: float = 60.0      # ~4x paper optimal (15.1 kW)
-    h2_storage_min: float = 30.0     # HRES design: must have meaningful H2 storage
+    h2_storage_min: float = 50.0     # HRES design: meaningful H2 buffer for FC
     h2_storage_max: float = 500.0    # ~5x paper optimal (~100 kg)
     biomass_min: float = 0.0
     biomass_max: float = 100.0  # ~3x paper optimal (27.4 kW)

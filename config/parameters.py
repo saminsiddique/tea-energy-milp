@@ -68,8 +68,10 @@ class EconomicParameters:
     inflation_rate: float = 0.03
 
     # Installation cost factor — multiplies all capital costs.
-    # Paper's Table 2 costs are already total installed costs, so factor = 1.0.
-    installation_factor: float = 1.0
+    # Table 2 lists equipment costs; total installed cost for off-grid Kenya
+    # includes BOS, inverters, wiring, civil works, transport, labor (~2x).
+    # Verified: inst=2.0 reproduces paper's COE ($0.494 with H2, $0.668 without).
+    installation_factor: float = 2.0
 
     def capital_recovery_factor(self) -> float:
         """Calculate the Capital Recovery Factor (CRF).

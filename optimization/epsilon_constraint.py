@@ -351,15 +351,25 @@ class EpsilonConstraintOptimizer:
         # ── Minimum renewable energy fraction ──
         # Paper designs a HRES where PV+WT are primary sources (~76% of energy).
         # Without this, the optimizer picks all-biomass (cheaper standalone).
-        # Require renewables to supply ≥ 70% of annual demand.
+        # Require renewables to supply ≥ 80% of annual demand (paper ~76%).
         total_re_output = (
             cap_pv * float(np.sum(self.irradiance))
             + cap_wind * float(np.sum(self.wind))
         )
         total_demand = float(np.sum(self.demand))
         model.addConstr(
-            total_re_output >= 0.70 * total_demand,
+            total_re_output >= 0.80 * total_demand,
             name="min_renewable_fraction",
+        )
+
+        # ── BM utilization cap: FC is primary backup, BM is secondary ──
+        # Paper dispatch (Fig 4): on deficit, FC activates first, BM only if needed.
+        # Limit BM to ≤ 40% of time blocks, forcing FC to handle primary backup.
+        BM_MAX_UTILIZATION = 0.40
+        model.addConstr(
+            gp.quicksum(y_bm_block[b] for b in range(n_bm_blocks))
+            <= BM_MAX_UTILIZATION * n_bm_blocks,
+            name="bm_utilization_cap",
         )
 
         # ── Objective expressions ──
