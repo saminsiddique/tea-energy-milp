@@ -155,10 +155,19 @@ def run_optimization(
 
     # Calculate normalized capacity factors
     irradiance = met_data["irradiance"].values
+    temperature = met_data["temperature"].values
     wind_speed = met_data["wind_speed_50m"].values
 
-    # Normalize to 0-1 range
-    irradiance_factor = irradiance / 1000.0  # Normalize by STC
+    # PV capacity factor with derating and temperature correction (Eq 11)
+    from config.parameters import PVParameters
+    from config.constants import PHYSICAL, STC
+    pv_params = PVParameters()
+
+    t_cell = temperature + (irradiance / 800.0) * (PHYSICAL.T_NOCT - 20.0)
+    delta_t = t_cell - STC.TEMPERATURE
+    temp_factor = 1.0 + pv_params.temp_coefficient * delta_t
+
+    irradiance_factor = pv_params.derating_factor * (irradiance / STC.IRRADIANCE) * temp_factor
     irradiance_factor = np.clip(irradiance_factor, 0, 1)
 
     # Wind factor using simplified power curve

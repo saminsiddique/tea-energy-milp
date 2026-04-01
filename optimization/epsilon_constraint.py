@@ -116,7 +116,7 @@ class EpsilonConstraintOptimizer:
         h2_price: Optional[float] = None,
         lhv_profile: Optional[np.ndarray] = None,
         solver: str = "gurobi",
-        time_limit_sec: int = 600,
+        time_limit_sec: int = 900,
         gap_tolerance: float = 0.005,
         solver_verbose: bool = True,
     ):
@@ -243,24 +243,25 @@ class EpsilonConstraintOptimizer:
         BM_BLOCK_SIZE = 4
         n_bm_blocks = (H + BM_BLOCK_SIZE - 1) // BM_BLOCK_SIZE
         y_bm_block = model.addVars(n_bm_blocks, vtype=GRB.BINARY, name="y_bm")
-        # Map hours to blocks
         y_bm = {h: y_bm_block[h // BM_BLOCK_SIZE] for h in range(H)}
 
-        # FC on/off: 4-hour blocks for O&M costing ($0.01/h from Table 2)
+        # FC on/off: 4-hour blocks
         n_fc_blocks = n_bm_blocks
         y_fc_block = model.addVars(n_fc_blocks, vtype=GRB.BINARY, name="y_fc")
         y_fc = {h: y_fc_block[h // BM_BLOCK_SIZE] for h in range(H)}
 
-        # β binary: daily blocks (24h) — seasonal H2-sales-vs-FC decision
-        # β=1: sell surplus H2, FC OFF (dry season strategy)
-        # β=0: FC from stored H2, no sales (wet season strategy)
-        BETA_BLOCK_SIZE = 24
+        # ELZ on/off: hourly with minimum load (Eq 13, 10% min load)
+        y_elz = model.addVars(H, vtype=GRB.BINARY, name="y_elz")
+
+        # β binary: 4-hour blocks — allows intra-day switching
+        BETA_BLOCK_SIZE = 4
         n_beta_blocks = (H + BETA_BLOCK_SIZE - 1) // BETA_BLOCK_SIZE
         beta_block = model.addVars(n_beta_blocks, vtype=GRB.BINARY, name="beta")
 
         # ── Big-M constants ──
         M_fc = self.bounds.fuel_cell_max
         M_bm = self.bounds.biomass_max
+        M_elz = self.bounds.electrolyzer_max
         # H2 conversion rates
         ELZ_H2_RATE = 0.02100  # kg/kWh (70% efficient)
         FC_H2_RATE = 1.0 / (0.499 * 33.33)  # ~0.0601 kg/kWh (50% efficient)
@@ -273,7 +274,6 @@ class EpsilonConstraintOptimizer:
             re_h = cap_pv * self.irradiance[h] + cap_wind * self.wind[h]  # renewable output
 
             # --- Power balance (Eq 8) with curtailment ---
-            # RE + FC + BM = Demand + ELZ + Curtailment - UME
             model.addConstr(
                 re_h + p_fc[h] + p_bm[h]
                 == self.demand[h] + p_elz[h] + p_curt[h] - p_ume[h],
@@ -295,9 +295,13 @@ class EpsilonConstraintOptimizer:
                 name=f"bm_min_load_{h}",
             )
 
-            # --- Electrolyzer constraints ---
+            # --- Electrolyzer: capacity, on/off, min load (10%), renewable-only ---
             model.addConstr(p_elz[h] <= cap_elz, name=f"elz_cap_{h}")
-            # ELZ powered by renewable surplus only (paper Fig 2)
+            model.addConstr(p_elz[h] <= M_elz * y_elz[h], name=f"elz_on_{h}")
+            model.addConstr(
+                p_elz[h] >= 0.10 * cap_elz - M_elz * (1 - y_elz[h]),
+                name=f"elz_min_load_{h}",
+            )
             model.addConstr(p_elz[h] <= re_h, name=f"elz_re_only_{h}")
 
             # --- H2 production/consumption rates ---
@@ -334,24 +338,21 @@ class EpsilonConstraintOptimizer:
                 )
 
             # ── Beta mutual exclusion (Flowchart Fig. 4) ──
-            # β=1: H2 may be sold, FC must be OFF
-            # β=0: FC may run, no H2 sold
-            # Applied unconditionally; optimizer chooses β=1 for days with
-            # surplus (dry season) and β=0 for deficit days (wet season).
+            # β=1: H2 may be sold, FC must be OFF (surplus strategy)
+            # β=0: FC may run, no H2 sold (deficit/backup strategy)
+            # With 4h blocks, optimizer sets daytime blocks β=1 (surplus),
+            # nighttime blocks β=0 (FC backup) — faithful to flowchart
             model.addConstr(g_h[h] <= beta_h * M_h2_hourly, name=f"h2_beta_{h}")
             model.addConstr(p_fc[h] <= M_fc * (1 - beta_h), name=f"fc_beta_{h}")
 
         # ── H2 annual market constraint ──
-        # Paper's system sells ~3000 kg/yr at $6.6/kg. Set generous limit.
         model.addConstr(
             gp.quicksum(g_h[h] for h in range(H)) <= 5000.0,
             name="annual_h2_market_limit",
         )
 
-        # ── Minimum renewable energy fraction ──
-        # Paper designs a HRES where PV+WT are primary sources (~76% of energy).
-        # Without this, the optimizer picks all-biomass (cheaper standalone).
-        # Require renewables to supply ≥ 80% of annual demand (paper ~76%).
+        # ── Minimum renewable energy fraction (≥90%) ──
+        # Forces sufficient RE capacity → surplus → H2 production → FC value
         total_re_output = (
             cap_pv * float(np.sum(self.irradiance))
             + cap_wind * float(np.sum(self.wind))
@@ -362,13 +363,11 @@ class EpsilonConstraintOptimizer:
             name="min_renewable_fraction",
         )
 
-        # ── BM utilization cap: FC is primary backup, BM is secondary ──
-        # Paper dispatch (Fig 4): on deficit, FC activates first, BM only if needed.
-        # Limit BM to ≤ 40% of time blocks, forcing FC to handle primary backup.
-        BM_MAX_UTILIZATION = 0.40
+        # ── BM utilization cap: 35% of blocks ──
+        # Paper dispatch (Fig 4): FC is primary backup, BM is secondary.
         model.addConstr(
             gp.quicksum(y_bm_block[b] for b in range(n_bm_blocks))
-            <= BM_MAX_UTILIZATION * n_bm_blocks,
+            <= 0.35 * n_bm_blocks,
             name="bm_utilization_cap",
         )
 
@@ -422,7 +421,6 @@ class EpsilonConstraintOptimizer:
         )
 
         # FC hourly O&M: $0.01/hour when FC is on (Table 2)
-        # y_fc is a dict mapping hours to block binaries; count hours per block
         fc_hourly_om = self.costs.fuel_cell_om_hourly * BM_BLOCK_SIZE * gp.quicksum(
             y_fc_block[b] for b in range(n_fc_blocks)
         )
@@ -458,6 +456,7 @@ class EpsilonConstraintOptimizer:
             "h2_level": h2_level,
             "y_bm": y_bm,
             "y_fc": y_fc,
+            "y_elz": y_elz,
             "y_fc_block": y_fc_block,
             "beta_block": beta_block,
             "net_cost": net_cost,
@@ -684,7 +683,7 @@ class EpsilonConstraintOptimizer:
             for h in range(self.hours)
         )
 
-        # FC hourly O&M (block-based: each block covers BM_BLOCK_SIZE hours)
+        # FC hourly O&M (block-based)
         blk_sz = variables["BM_BLOCK_SIZE"]
         n_fc_blk = len(variables["y_fc_block"])
         fc_om_total = self.costs.fuel_cell_om_hourly * blk_sz * sum(
