@@ -23,6 +23,7 @@ dependencies = [
     "pyarrow>=14.0.0",
     "highspy>=1.13.1",
     "gurobipy>=13.0.0",
+    "pypdf>=6.9.2",
 ]
 
 [project.optional-dependencies]

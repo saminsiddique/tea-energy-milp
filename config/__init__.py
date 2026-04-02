@@ -1,18 +1,8 @@
-"""Configuration module for H2-HRES optimization."""
+"""Configuration module for NSGA paper replication."""
 
-from config.parameters import SystemParameters, ComponentCosts, EconomicParameters
-from config.constants import PhysicalConstants, PHYSICAL, LOCATION, STC, H2
-from config.scenarios import Scenarios, ScenarioConfig
+from config.nsga_parameters import NSGASystemParams, DEFAULT_NSGA_PARAMS
 
 __all__ = [
-    "SystemParameters",
-    "ComponentCosts",
-    "EconomicParameters",
-    "PhysicalConstants",
-    "PHYSICAL",
-    "LOCATION",
-    "STC",
-    "H2",
-    "Scenarios",
-    "ScenarioConfig",
+    "NSGASystemParams",
+    "DEFAULT_NSGA_PARAMS",
 ]

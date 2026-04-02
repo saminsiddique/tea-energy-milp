@@ -21,8 +21,6 @@ import pandas as pd
 import requests
 from tqdm import tqdm
 
-from config.constants import LOCATION
-
 
 class NASAPowerClient:
     """Client for NASA POWER API to fetch meteorological data."""
@@ -41,8 +39,8 @@ class NASAPowerClient:
 
     def __init__(
         self,
-        latitude: float = LOCATION.LATITUDE,
-        longitude: float = LOCATION.LONGITUDE,
+        latitude: float = 20.633,
+        longitude: float = 92.320,
         cache_dir: Optional[Path] = None,
     ):
         """Initialize NASA POWER client.

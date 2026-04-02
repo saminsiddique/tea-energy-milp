@@ -1,7 +1,0 @@
-Component,Capital Cost,Capital Unit,O&M Cost,O&M Unit,Fuel Cost ($/ton)
-Solar PV,900,$/kW,55,$/year per kW,—
-Wind Turbine,1200,$/kW,41.78,$/year per kW,—
-Electrolyzer (PEM),890,$/kW,20,$/year per kW,—
-Fuel Cell (PEM),1000,$/kW,0.01,$/hour of operation,—
-H2 Storage Tank,1100,$/kg capacity,0,$/year,—
-Biomass Generator,600,$/kW,15,$/year per kW,40

@@ -1,9 +1,0 @@
-Parameter,Value,Unit,Reference
-Min State of Charge (SOC),0.10 (10%),fraction,Eq. 16
-Max State of Charge (SOC),0.95 (95%),fraction,Eq. 16
-Storage Efficiency,0.98 (98%),fraction (compression losses),—
-Initial SOC,0.50 (50%),fraction,—
-H2 Molar Mass,2.016,g/mol,—
-H2 LHV,120.0 / 33.33,MJ/kg / kWh/kg,—
-H2 HHV,141.8,MJ/kg,—
-H2 Density at STP,0.0899,kg/m³,—

@@ -1,6 +1,0 @@
-Parameter,Value,Unit,Reference
-Overall Efficiency,0.70 (70%),fraction,Eq. 13
-Minimum Operating Load,0.10 (10%),fraction of rated,—
-Operating Temperature,80,°C,Section 2.5.2.3
-Reversible Voltage (V_rev),1.23,V,Electrochemistry
-Thermoneutral Voltage (V_tn),1.48,V,Electrochemistry

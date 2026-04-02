@@ -1,11 +1,9 @@
-"""Data fetcher modules for H2-HRES."""
+"""Data fetcher modules for NSGA paper replication."""
 
 from data.fetchers.nasa_power import NASAPowerClient
-from data.fetchers.load_profile import LoadProfileGenerator
-from data.fetchers.biomass_data import BiomassDataProvider
+from data.fetchers.saint_martin_data import SaintMartinDataProvider
 
 __all__ = [
     "NASAPowerClient",
-    "LoadProfileGenerator",
-    "BiomassDataProvider",
+    "SaintMartinDataProvider",
 ]

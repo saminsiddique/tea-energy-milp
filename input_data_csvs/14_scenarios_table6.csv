@@ -1,9 +1,0 @@
-Scenario,Month,LHV Level,LHV (MJ/kg),Irradiance Level,Wind Level,Climate,Description
-SC1,January,High,17.5,High,High,Dry,Dry season with high solar and wind - optimal for H2 production
-SC2,February,High,17.5,High,Low,Dry,Dry season with high solar low wind - solar dominant
-SC3,April,High,17.5,Low,High,Dry,Dry season with low solar high wind - wind dominant
-SC4,July,High,17.5,Low,Low,Cold Dry,Cold dry season with low renewables - biomass backup needed
-SC5,December,Low,14.3,High,High,Rainy,Rainy season with high renewables - fuel cell backup
-SC6,May,Low,14.3,High,Low,Rainy,Rainy season with high solar low wind
-SC7,November,Low,14.3,Low,High,Rainy,Rainy season with low solar high wind
-SC8,May,Low,14.3,Low,Low,Cold Rainy,Cold rainy season with low renewables - highest FC usage

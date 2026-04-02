@@ -1,8 +1,0 @@
-Parameter,Value,Unit,Reference
-Derating Factor,0.80,fraction,Eq. 11
-Temperature Coefficient,-0.0045,per °C,Eq. 11
-Panel Efficiency at STC,0.20 (20%),fraction,—
-STC Irradiance,1000,W/m²,Standard
-STC Temperature,25,°C,Standard
-STC Air Mass,1.5,—,Standard
-NOCT,45,°C,—
