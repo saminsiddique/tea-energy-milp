@@ -4,7 +4,8 @@
       "Bash(uv pip install:*)",
       "Bash(python:*)",
       "Bash(uv run python:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(.venv/Scripts/python.exe -c \"from config.nsga_parameters import DEFAULT_NSGA_PARAMS as p; print\\('ELZ', p.electrolyzer.capital_cost, p.electrolyzer.om_cost, p.electrolyzer.lifetime\\); print\\('Meth', p.methanation.capital_cost, p.methanation.lifetime\\); print\\('GS', p.gas_storage.capital_cost, p.gas_storage.om_cost, p.gas_storage.lifetime\\); print\\('Inv rep', p.inverter.replacement_cost\\); print\\('NSGA2', p.nsga2.pop_size, p.nsga2.n_gens, p.nsga2.p_crossover\\)\")"
     ]
   }
 }

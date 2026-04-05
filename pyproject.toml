@@ -1,29 +1,28 @@
 [project]
 name = "h2-hres"
-version = "0.1.0"
-description = "Hydrogen-based Hybrid Renewable Energy System optimization using epsilon-constraint MILP"
+version = "0.2.0"
+description = "Ahmed et al. (2024) paper replication: NSGA-II + rule-based EMS for H2-HRES sizing"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
     {name = "Research Implementation"}
 ]
-keywords = ["hydrogen", "renewable energy", "MILP", "optimization", "HRES"]
+keywords = ["hydrogen", "renewable energy", "NSGA-II", "optimization", "HRES"]
 
 dependencies = [
     "numpy>=1.24.0",
     "pandas>=2.0.0",
     "scipy>=1.10.0",
-    "pulp>=2.7.0",
     "matplotlib>=3.7.0",
     "seaborn>=0.12.0",
     "requests>=2.28.0",
     "pyyaml>=6.0",
     "tqdm>=4.65.0",
     "pyarrow>=14.0.0",
-    "highspy>=1.13.1",
-    "gurobipy>=13.0.0",
     "pypdf>=6.9.2",
+    "pymoo>=0.6.1",
+    "numba>=0.59.0",
 ]
 
 [project.optional-dependencies]
@@ -33,7 +32,7 @@ dev = [
 ]
 
 [project.scripts]
-h2hres = "main:main"
+h2hres = "nsga2_main:main"
 
 [build-system]
 requires = ["hatchling"]

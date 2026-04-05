@@ -73,14 +73,14 @@ class NSGADieselParams:
 
 @dataclass
 class NSGAElectrolyzerParams:
-    """PEM Electrolyzer parameters (Eqs 1-4)."""
+    """PEM Electrolyzer parameters (Eqs 1-4). Costs from paper Table 3."""
     voltage_efficiency: float = 0.70  # η_V
     h2_decomposition_voltage: float = 1.48  # V_H (V)
     faraday_constant: float = 96485.0  # C/mol
-    capital_cost: float = 1200.0  # $/kW (estimated)
-    om_cost: float = 20.0  # $/kW-year
-    replacement_cost: float = 1000.0  # $/kW
-    lifetime: int = 15  # years
+    capital_cost: float = 500.0  # $/kW (Table 3)
+    om_cost: float = 10.0  # $/kW-year (Table 3)
+    replacement_cost: float = 300.0  # $/kW (Table 3)
+    lifetime: int = 10  # years (Table 3)
 
     @property
     def working_voltage(self) -> float:
@@ -100,27 +100,34 @@ class NSGAElectrolyzerParams:
 
 @dataclass
 class NSGAMethanationParams:
-    """Methanation parameters (Eqs 5-6).
+    """Methanation parameters (Eqs 5-6). Costs from paper Table 3.
+
     Paper model: M_meth(t) = eta_meth × M_elec(t)
     eta_meth is a direct mol H2 → mol CH4 conversion factor.
+    Methanation rated power is sized equal to electrolyzer (paper §2.4.2).
     """
     eta_meth: float = 0.80  # Paper Eq 5: 1 mol H2 → 0.80 mol CH4
     ch4_molar_mass: float = 16.0  # g/mol
+    capital_cost: float = 400.0  # $/kW (Table 3)
+    om_cost: float = 10.0  # $/kW-year (Table 3)
+    replacement_cost: float = 200.0  # $/kW (Table 3)
+    lifetime: int = 10  # years (Table 3)
 
 
 @dataclass
 class NSGAGasStorageParams:
-    """Single-well-vertical (SWV) gas storage (Eqs 7-12)."""
+    """Single-well-vertical (SWV) gas storage (Eqs 7-12). Costs from paper Table 3."""
     pressure: float = 20.0  # MPa (K_SWV)
     temperature: float = 298.0  # K (T_SWV = 25°C)
     gas_constant: float = 8.314e-3  # kPa·m³/(mol·K) for volume calc
     soc_min: float = 0.20  # 20% min SOC
     soc_max: float = 1.00  # 100% max SOC
     dod: float = 0.80  # depth of discharge
-    # Cost per m³ of compressed storage volume
-    capital_cost: float = 500.0  # $/m³ compressed (estimated)
-    om_cost: float = 10.0  # $/m³-year
-    lifetime: int = 25  # years
+    # Cost per m³ of compressed storage volume (Table 3)
+    capital_cost: float = 20.0  # $/m³ compressed (Table 3: 20 $/m3)
+    om_cost: float = 4.0  # $/m³-year (Table 3)
+    replacement_cost: float = 20.0  # $/m³ (assume = capital)
+    lifetime: int = 20  # years (Table 3)
     compression_ratio: float = 197.4  # P_storage/P_atm = 20000/101.325
 
     @property
@@ -148,11 +155,12 @@ class NSGAROParams:
 
 @dataclass
 class NSGAInverterParams:
-    """Inverter parameters (Eqs 27-28)."""
+    """Inverter parameters (Eqs 27-28). Costs from paper Table 3."""
     efficiency: float = 0.95  # η_inv
-    capital_cost: float = 300.0  # $/kW
-    lifetime: int = 15  # years
-    replacement_cost: float = 250.0  # $/kW
+    capital_cost: float = 300.0  # $/kW (Table 3)
+    om_cost: float = 10.0  # $/kW-year (Table 3)
+    lifetime: int = 15  # years (Table 3)
+    replacement_cost: float = 300.0  # $/kW (Table 3; was incorrectly 250)
 
 
 @dataclass
@@ -177,7 +185,7 @@ class NSGAEconomicParams:
 
 @dataclass
 class NSGACapacityBounds:
-    """Optimization bounds for component capacities."""
+    """Optimization bounds for component capacities (NSGA-II decision variables)."""
     pv_min: float = 0.0
     pv_max: float = 1000.0  # kW (paper PV/Batt uses 827 kW)
     wind_min: float = 0.0
@@ -190,6 +198,19 @@ class NSGACapacityBounds:
     elz_max: float = 500.0  # kW (paper PV/Batt uses 306 kW)
     gas_storage_min: float = 0.0
     gas_storage_max: float = 1000.0  # m³ compressed (~3x paper 360)
+
+
+@dataclass
+class NSGANSGA2Params:
+    """NSGA-II algorithm parameters from paper Table 5."""
+    pop_size: int = 500  # Population size (Table 5)
+    n_gens: int = 500  # Maximum generations (Table 5)
+    p_crossover: float = 0.9  # SBX crossover rate (Table 5)
+    p_mutation: float = 0.1  # Polynomial mutation rate (Table 5)
+    sbx_eta: float = 15.0  # SBX distribution index
+    pm_eta: float = 20.0  # Polynomial mutation distribution index
+    seed: int = 42
+    lpsp_max: float = 0.01  # Reliability constraint: LPSP <= 1%
 
 
 @dataclass
@@ -228,6 +249,7 @@ class NSGASystemParams:
     inverter: NSGAInverterParams = field(default_factory=NSGAInverterParams)
     economic: NSGAEconomicParams = field(default_factory=NSGAEconomicParams)
     bounds: NSGACapacityBounds = field(default_factory=NSGACapacityBounds)
+    nsga2: NSGANSGA2Params = field(default_factory=NSGANSGA2Params)
     load: NSGALoadParams = field(default_factory=NSGALoadParams)
     location: NSGALocationParams = field(default_factory=NSGALocationParams)
 

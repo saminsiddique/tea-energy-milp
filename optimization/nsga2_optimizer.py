@@ -1,0 +1,176 @@
+"""NSGA-II wrapper (pymoo) for the rule-based EMS simulator.
+
+Single-objective: minimise NPC.
+Constraint: LPSP <= params.nsga2.lpsp_max (1% default).
+
+Paper Table 5 parameters drive the algorithm configuration:
+  - Population size: 500
+  - Generations: 500
+  - SBX crossover rate: 0.9
+  - Polynomial mutation rate: 0.1
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Dict
+
+import numpy as np
+from pymoo.algorithms.soo.nonconvex.ga import GA
+from pymoo.algorithms.moo.nsga2 import NSGA2
+from pymoo.core.problem import ElementwiseProblem
+from pymoo.operators.crossover.sbx import SBX
+from pymoo.operators.mutation.pm import PM
+from pymoo.operators.sampling.rnd import FloatRandomSampling
+from pymoo.optimize import minimize
+
+from config.nsga_parameters import NSGASystemParams, NSGACapacityBounds
+from optimization.ems_simulator import simulate, SimulationResult
+
+
+# ============================================================
+# Problem definition
+# ============================================================
+
+class HESProblem(ElementwiseProblem):
+    """Sizing problem over (PV, Wind, DG, Batt, ELZ, GS).
+
+    Objective: minimise NPC ($).
+    Constraints:
+      g1: LPSP - lpsp_max <= 0                      (reliability)
+      g2: min_gas_coverage * gas_demand - ch4_del <= 0  (gas chain usage)
+
+    The gas coverage constraint is needed because, without it, NSGA-II
+    correctly identifies the electrolyzer and gas storage as pure cost
+    (gas demand is not otherwise enforced) and drives them to zero. The
+    paper's Table 6 implies ~10 % gas coverage (ELZ = 139 kW produces
+    ~11,663 m3/yr CH4 against 120,450 m3/yr demand), so we mirror that
+    by requiring at least `min_gas_coverage` of annual gas demand.
+    """
+
+    def __init__(
+        self,
+        data: Dict[str, np.ndarray],
+        params: NSGASystemParams,
+        bounds: NSGACapacityBounds,
+        lpsp_max: float,
+        min_gas_coverage: float = 0.10,  # paper's implied ratio (Table 6: 11,663/120,450 ≈ 9.68 %)
+    ):
+        xl = np.array([
+            bounds.pv_min, bounds.wind_min, bounds.dg_min,
+            bounds.batt_min, bounds.elz_min, bounds.gas_storage_min,
+        ])
+        xu = np.array([
+            bounds.pv_max, bounds.wind_max, bounds.dg_max,
+            bounds.batt_max, bounds.elz_max, bounds.gas_storage_max,
+        ])
+        super().__init__(n_var=6, n_obj=1, n_ieq_constr=2, xl=xl, xu=xu)
+        self.data = data
+        self.params = params
+        self.lpsp_max = lpsp_max
+        self.min_gas_coverage = min_gas_coverage
+        self._total_gas_demand = float(np.sum(data["gas_demand"]))
+
+    def _evaluate(self, x, out, *args, **kwargs):
+        sizes = {
+            "pv_kw": float(x[0]),
+            "wind_kw": float(x[1]),
+            "dg_kw": float(x[2]),
+            "batt_kwh": float(x[3]),
+            "elz_kw": float(x[4]),
+            "gas_storage_m3": float(x[5]),
+        }
+        res = simulate(sizes, self.data, self.params)
+        gas_required = self.min_gas_coverage * self._total_gas_demand
+        out["F"] = [res.npc]
+        out["G"] = [
+            res.lpsp - self.lpsp_max,
+            # Constrain PRODUCTION (not just delivery) so the electrolyzer
+            # is forced to actually run. Otherwise the optimizer can sit on
+            # any residual tank inventory without using the gas chain.
+            gas_required - res.annual_ch4_m3_stp,
+        ]
+
+
+# ============================================================
+# Runner
+# ============================================================
+
+@dataclass
+class NSGA2RunSummary:
+    best: SimulationResult
+    n_evals: int
+    history: list  # list of (gen, best_npc, best_lpsp)
+
+
+def run_nsga2(
+    data: Dict[str, np.ndarray],
+    params: NSGASystemParams,
+    bounds: NSGACapacityBounds | None = None,
+    verbose: bool = True,
+) -> NSGA2RunSummary:
+    """Run the paper's NSGA-II and return the best feasible solution."""
+    bounds = bounds or params.bounds
+    nsga2_cfg = params.nsga2
+
+    problem = HESProblem(data, params, bounds, nsga2_cfg.lpsp_max)
+
+    # Paper uses NSGA-II but the inner problem is single-objective.
+    # pymoo's NSGA2 class handles both; we use it directly so the Table 5
+    # parameters (SBX, PM, pop, gens) map 1:1 onto the paper's algorithm.
+    algorithm = NSGA2(
+        pop_size=nsga2_cfg.pop_size,
+        sampling=FloatRandomSampling(),
+        crossover=SBX(prob=nsga2_cfg.p_crossover, eta=nsga2_cfg.sbx_eta),
+        mutation=PM(prob=nsga2_cfg.p_mutation, eta=nsga2_cfg.pm_eta),
+        eliminate_duplicates=True,
+    )
+
+    res = minimize(
+        problem,
+        algorithm,
+        ("n_gen", nsga2_cfg.n_gens),
+        seed=nsga2_cfg.seed,
+        verbose=verbose,
+        save_history=False,
+    )
+
+    # Extract best feasible solution
+    if res.X is None:
+        raise RuntimeError("NSGA-II returned no feasible solution")
+
+    # pymoo single-objective with constraints: res.X is the best feasible x
+    # (if any feasible was found). Shape may be (n_var,) or (pop, n_var).
+    x_best = res.X
+    if x_best.ndim > 1:
+        # Find the feasible solution with lowest F
+        f_vals = res.F
+        g_vals = res.G
+        f_2d = np.atleast_2d(f_vals)
+        if g_vals is not None:
+            g_2d = np.atleast_2d(g_vals)
+            feas_mask = np.all(g_2d <= 0, axis=1)
+            if feas_mask.any():
+                feas_idx = np.where(feas_mask)[0]
+                best_idx = feas_idx[np.argmin(f_2d[feas_idx, 0])]
+            else:
+                best_idx = int(np.argmin(f_2d[:, 0]))
+        else:
+            best_idx = int(np.argmin(f_2d[:, 0]))
+        x_best = x_best[best_idx]
+
+    best_sizes = {
+        "pv_kw": float(x_best[0]),
+        "wind_kw": float(x_best[1]),
+        "dg_kw": float(x_best[2]),
+        "batt_kwh": float(x_best[3]),
+        "elz_kw": float(x_best[4]),
+        "gas_storage_m3": float(x_best[5]),
+    }
+    best_result = simulate(best_sizes, data, params)
+
+    return NSGA2RunSummary(
+        best=best_result,
+        n_evals=res.algorithm.evaluator.n_eval,
+        history=[],
+    )
