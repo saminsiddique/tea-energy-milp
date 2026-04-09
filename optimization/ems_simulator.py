@@ -5,20 +5,22 @@ Section 2.7.3 "Energy management strategy" and Fig. 3.
 
 Hour-by-hour dispatch (no optimization in the inner loop):
 
-  Surplus mode (RE > base_load):
+  Surplus mode (RE > community_electric_load):
       1. Charge battery first (up to SOC_max, rate-limited).
-      2. Feed electrolyzer with whatever leftover remains (up to ELZ cap).
-      3. Dump the rest as excess.
+      2. Power RO desalination from remaining excess.
+      3. Feed electrolyzer with remaining excess (up to ELZ cap).
+      4. Dump the rest.
 
-  Deficit mode (RE < base_load):
-      1. Discharge battery first (down to SOC_min, rate-limited).
-      2. Fire diesel generator for any remaining shortfall.
-      3. If still short, record as unmet (LPSP).
+  Deficit mode (RE < community_electric_load):
+      1. Discharge battery to cover community deficit.
+      2. DG covers remaining community deficit + RO + electrolyzer
+         (priority: community > RO > electrolyzer).
+      3. If still short, record community unmet (LPSP).
 
-Water demand is treated as hourly-pinned base load (RO power folded into
-base_load), so water is always met as long as LPSP is satisfied. Gas demand is
-served from the methanated CH4 in the compressed gas tank; any uncovered gas
-demand is simply reported (no constraint).
+RO and electrolyzer (gas production) are powered from EXCESS energy or DG —
+they are NOT part of the base electrical load. Gas demand is served from
+the compressed CH4 tank; the electrolyzer fills the tank from both surplus
+and DG leftover capacity.
 
 After the loop, NPC / COE / COW / COG are computed per paper Eqs 29–44.
 
@@ -139,22 +141,24 @@ def _simulate_dispatch(
 
     for h in range(H):
         re_h = pv_kw * irradiance[h] + wind_kw * wind[h]
-        load_h = elec_demand[h] + ro_power[h]  # base load includes RO
-        e_net = re_h - load_h
+        community_load = elec_demand[h]   # community electric only
+        ro_load = ro_power[h]             # RO powered from excess / DG
+        e_net = re_h - community_load
 
         p_elz_h = 0.0
         excess_h = 0.0
         dg_out_h = 0.0
         unmet_h = 0.0
+        ro_served_h = 0.0
 
         if e_net >= 0.0:
-            # ───── Surplus branch ─────
+            # ───── Surplus branch (Fig. 3 top path) ─────
+            # Community load fully met by RE.
             surplus = e_net
 
             # (1) Charge battery first
             ch_room_kwh = (batt_max - batt_soc) / max(eta_ch, 1e-9)
-            # Rate limit: 1C (full capacity in 1 hour)
-            ch_rate_limit = batt_kwh
+            ch_rate_limit = batt_kwh  # 1C
             p_charge = surplus
             if p_charge > ch_room_kwh:
                 p_charge = ch_room_kwh
@@ -165,7 +169,16 @@ def _simulate_dispatch(
             batt_soc += p_charge * eta_ch
             surplus -= p_charge
 
-            # (2) Feed electrolyzer with what's left (up to ELZ cap)
+            # (2) Power RO from excess
+            ro_from_ee = surplus
+            if ro_from_ee > ro_load:
+                ro_from_ee = ro_load
+            if ro_from_ee < 0.0:
+                ro_from_ee = 0.0
+            surplus -= ro_from_ee
+            ro_served_h = ro_from_ee
+
+            # (3) Feed electrolyzer from excess (up to ELZ cap)
             p_elz_h = surplus
             if p_elz_h > elz_kw:
                 p_elz_h = elz_kw
@@ -173,26 +186,19 @@ def _simulate_dispatch(
                 p_elz_h = 0.0
             surplus -= p_elz_h
 
-            # Methanation + gas storage (compressed volume)
-            ch4_prod_stp = p_elz_h * gas_rate_stp_per_kwh
-            ch4_prod_comp = p_elz_h * gas_rate_comp_per_kwh
-            gas_level += ch4_prod_comp
-            if gas_level > gas_max:
-                # tank overflow -> untracked vent
-                gas_level = gas_max
-            annual_ch4_prod_stp += ch4_prod_stp
-
-            # (3) Dump the rest
+            # No DG in surplus mode — ELZ/RO use only excess energy.
+            # (4) Dump remaining excess
             excess_h = surplus if surplus > 0.0 else 0.0
 
         else:
-            # ───── Deficit branch ─────
-            needed = -e_net  # kWh (AC side)
+            # ───── Deficit branch (Fig. 3 bottom path) ─────
+            # Battery covers community deficit + RO (both are essential).
+            # DG fires only when battery is depleted.
+            needed = -e_net + ro_load  # total shortfall: community gap + RO
 
-            # (1) Discharge battery first
+            # (1) Discharge battery to cover community + RO deficit
             dis_room_kwh_dc = (batt_soc - batt_min)
             dis_rate_limit_dc = batt_kwh  # 1C
-            # AC energy deliverable
             dis_room_ac = dis_room_kwh_dc * eta_dis * inv_eff
             dis_rate_ac = dis_rate_limit_dc * eta_dis * inv_eff
             p_dis_ac = needed
@@ -202,30 +208,42 @@ def _simulate_dispatch(
                 p_dis_ac = dis_rate_ac
             if p_dis_ac < 0.0:
                 p_dis_ac = 0.0
-            # Update SOC from AC delivered
             p_dis_dc = p_dis_ac / (eta_dis * inv_eff) if (eta_dis * inv_eff) > 0 else 0.0
             batt_soc -= p_dis_dc
             if batt_soc < batt_min:
                 batt_soc = batt_min
             needed -= p_dis_ac
 
-            # (2) Diesel generator
+            # (2) DG covers remaining (community + RO).
+            #     Electrolyzer does NOT get DG power — it is purely
+            #     opportunistic (surplus energy only).
             if needed > 0.0:
                 dg_out_h = needed
                 if dg_out_h > dg_kw:
                     dg_out_h = dg_kw
                 needed -= dg_out_h
-                if dg_out_h > 0.0:
-                    annual_dg_hours += 1
-                    # Fuel consumption (Eq 21): F0 * P_dg + F1 * P_rated
-                    annual_fuel_L += F0 * dg_out_h + F1 * dg_kw
-                    annual_dg_energy += dg_out_h
 
-            # (3) Unmet
-            if needed > 0.0:
-                unmet_h = needed
+            # RO considered served (from battery or DG)
+            ro_served_h = ro_load
 
-        # ───── Gas demand draw (any hour) ─────
+            # (3) Community unmet (if DG couldn't cover everything)
+            unmet_h = needed if needed > 0.0 else 0.0
+
+        # ───── DG fuel accounting (Eq 21) ─────
+        if dg_out_h > 0.0:
+            annual_dg_hours += 1
+            annual_fuel_L += F0 * dg_out_h + F1 * dg_kw
+            annual_dg_energy += dg_out_h
+
+        # ───── Methanation + gas storage (compressed volume) ─────
+        ch4_prod_stp = p_elz_h * gas_rate_stp_per_kwh
+        ch4_prod_comp = p_elz_h * gas_rate_comp_per_kwh
+        gas_level += ch4_prod_comp
+        if gas_level > gas_max:
+            gas_level = gas_max
+        annual_ch4_prod_stp += ch4_prod_stp
+
+        # ───── Gas demand draw from storage ─────
         gas_req_comp = gas_demand_comp[h]
         if gas_req_comp > 0.0:
             available = gas_level - gas_min
@@ -235,11 +253,10 @@ def _simulate_dispatch(
             if gas_draw_comp > available:
                 gas_draw_comp = available
             gas_level -= gas_draw_comp
-            # Back to STP for reporting
             annual_ch4_delivered_stp += gas_draw_comp * (gas_rate_stp_per_kwh / max(gas_rate_comp_per_kwh, 1e-12))
 
-        # Accumulate annual energy served (load actually met)
-        served_h = load_h - unmet_h
+        # ───── Energy accounting ─────
+        served_h = community_load + ro_served_h - unmet_h
         if served_h < 0.0:
             served_h = 0.0
         annual_energy_served += served_h
@@ -452,7 +469,7 @@ def simulate(
     total_gas_demand_stp = float(np.sum(gas_demand))
     cog = (gas_chain_pv * crf) / total_gas_demand_stp if total_gas_demand_stp > 0 else 0.0
 
-    total_elec_demand = float(np.sum(elec_demand + ro_power))
+    total_elec_demand = float(np.sum(elec_demand))  # community only (RO served from excess/DG)
     lpsp = annual_unmet / total_elec_demand if total_elec_demand > 0 else 1.0
     renewable_fraction = (
         1.0 - annual_dg_energy / annual_energy_served

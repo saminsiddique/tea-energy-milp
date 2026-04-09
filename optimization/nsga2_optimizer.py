@@ -72,7 +72,7 @@ class HESProblem(ElementwiseProblem):
         params: NSGASystemParams,
         bounds: NSGACapacityBounds,
         lpsp_max: float,
-        min_gas_coverage: float = 0.10,  # paper's implied ratio (Table 6: 11,663/120,450 ≈ 9.68 %)
+        min_gas_coverage: float = 0.20,  # paper sizes produce ~21% coverage with our weather data
     ):
         xl = np.array([
             bounds.pv_min, bounds.wind_min, bounds.dg_min,
@@ -103,10 +103,9 @@ class HESProblem(ElementwiseProblem):
         out["F"] = [res.npc]
         out["G"] = [
             res.lpsp - self.lpsp_max,
-            # Constrain PRODUCTION (not just delivery) so the electrolyzer
-            # is forced to actually run. Otherwise the optimizer can sit on
-            # any residual tank inventory without using the gas chain.
-            gas_required - res.annual_ch4_m3_stp,
+            # Constrain DELIVERY (gas actually drawn from storage) so the
+            # optimizer must size both electrolyzer AND gas storage.
+            gas_required - res.annual_ch4_delivered_stp,
         ]
 
 

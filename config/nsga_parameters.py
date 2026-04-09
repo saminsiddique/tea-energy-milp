@@ -148,7 +148,7 @@ class NSGAROParams:
     om_cost: float = 0.20  # $/m³ water produced
     chemical_cost: float = 0.06  # $/m³
     membrane_replacements_per_year: int = 2
-    membrane_cost_per_m3day: float = 66.5  # $/m³/day (estimated)
+    membrane_cost_per_m3day: float = 0.06  # $/m³/day (Table 3: Replacement Cost 0.06 $/m³)
     water_tank_cost: float = 255.4  # $/m³ tank capacity
     water_tank_days: float = 2.0  # 2-day storage capacity
 

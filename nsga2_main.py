@@ -32,19 +32,9 @@ from optimization.ems_simulator import simulate, SimulationResult
 from optimization.nsga2_optimizer import run_nsga2, NSGA2RunSummary
 
 
-# Bounds narrowed around paper Table 6 (≤ 15 % on every side) to keep NSGA-II
-# on the paper's branch of the flat NPC plateau. DG / ELZ / GS minimums are
-# pushed up because the first run showed the optimizer pinning them to any
-# looser floor (i.e. the unconstrained optimum has smaller DG/ELZ/GS than
-# the paper). The ≤ 15 % window forces every capacity to satisfy the target.
-PAPER_TIGHT_BOUNDS = NSGACapacityBounds(
-    pv_min=135,   pv_max=183,     # paper 159 (-15% / +15%)
-    wind_min=85,  wind_max=115,   # paper 100 (-15% / +15%)
-    dg_min=52,    dg_max=69,      # paper 60  (-13% / +15%)
-    batt_min=372, batt_max=502,   # paper 437 (-15% / +15%)
-    elz_min=120,  elz_max=160,    # paper 139 (-14% / +15%)
-    gas_storage_min=310, gas_storage_max=414,  # paper 360 (-14% / +15%)
-)
+# With the corrected EMS (Fig. 3: RO + gas powered from excess/DG, not base
+# load), the optimizer should naturally find reasonable component sizes without
+# artificial tight bounds.  Default bounds from NSGACapacityBounds are used.
 
 
 PAPER = {
@@ -158,15 +148,15 @@ def export_pareto_csv(population, filepath: str) -> None:
 
 
 def stage2_nsga2(data: dict, params: NSGASystemParams, pareto_csv: str = "pareto_front.csv") -> NSGA2RunSummary:
-    """Run NSGA-II sizing optimization with paper-centred bounds."""
+    """Run NSGA-II sizing optimization with default (open) bounds."""
     cfg = params.nsga2
-    b = PAPER_TIGHT_BOUNDS
+    b = params.bounds
     print("\n" + "=" * 70)
     print(f"  STAGE 2 — NSGA-II sizing (pop={cfg.pop_size}, gens={cfg.n_gens})")
     print(f"  SBX p={cfg.p_crossover} eta={cfg.sbx_eta}, "
           f"PM p={cfg.p_mutation} eta={cfg.pm_eta}, LPSP_max={cfg.lpsp_max*100:.1f}%, "
           f"seed={cfg.seed}")
-    print(f"  Bounds (tight, ±~25% around Table 6):")
+    print(f"  Bounds (default, open):")
     print(f"    PV   in [{b.pv_min},{b.pv_max}]  WT in [{b.wind_min},{b.wind_max}]  "
           f"DG in [{b.dg_min},{b.dg_max}]")
     print(f"    Batt in [{b.batt_min},{b.batt_max}]  ELZ in [{b.elz_min},{b.elz_max}]  "
@@ -174,7 +164,7 @@ def stage2_nsga2(data: dict, params: NSGASystemParams, pareto_csv: str = "pareto
     print("=" * 70)
 
     t0 = time.time()
-    summary = run_nsga2(data=data, params=params, bounds=PAPER_TIGHT_BOUNDS, verbose=True)
+    summary = run_nsga2(data=data, params=params, bounds=None, verbose=True)
     elapsed = time.time() - t0
     print(f"\n  NSGA-II finished: {summary.n_evals} evaluations in "
           f"{elapsed/60:.1f} min ({elapsed/summary.n_evals*1000:.2f} ms/eval)")
