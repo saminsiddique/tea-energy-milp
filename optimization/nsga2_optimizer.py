@@ -29,6 +29,24 @@ from optimization.ems_simulator import simulate, SimulationResult
 
 
 # ============================================================
+# Population record (single individual in the final population)
+# ============================================================
+
+@dataclass
+class PopulationRecord:
+    pv_kw: float
+    wind_kw: float
+    dg_kw: float
+    batt_kwh: float
+    elz_kw: float
+    gas_storage_m3: float
+    npc: float
+    lpsp: float           # actual LPSP fraction (not violation); = g1 + lpsp_max
+    gas_violation: float  # g2 value; <= 0 means constraint satisfied
+    feasible: bool
+
+
+# ============================================================
 # Problem definition
 # ============================================================
 
@@ -101,6 +119,7 @@ class NSGA2RunSummary:
     best: SimulationResult
     n_evals: int
     history: list  # list of (gen, best_npc, best_lpsp)
+    final_population: list  # list[PopulationRecord], sorted: feasible first, then NPC asc
 
 
 def run_nsga2(
@@ -134,6 +153,29 @@ def run_nsga2(
         verbose=verbose,
         save_history=False,
     )
+
+    # Extract full final population
+    pop_X = res.pop.get("X")           # (n_pop, 6)
+    pop_F = res.pop.get("F")           # (n_pop, 1)
+    pop_G = res.pop.get("G")           # (n_pop, 2)
+    pop_feas = res.pop.get("feasible").flatten()  # (n_pop,) bool
+    lpsp_max = nsga2_cfg.lpsp_max
+
+    final_pop: list[PopulationRecord] = []
+    for i in range(len(pop_X)):
+        final_pop.append(PopulationRecord(
+            pv_kw=float(pop_X[i, 0]),
+            wind_kw=float(pop_X[i, 1]),
+            dg_kw=float(pop_X[i, 2]),
+            batt_kwh=float(pop_X[i, 3]),
+            elz_kw=float(pop_X[i, 4]),
+            gas_storage_m3=float(pop_X[i, 5]),
+            npc=float(pop_F[i, 0]),
+            lpsp=float(pop_G[i, 0]) + lpsp_max,  # g1 = lpsp - lpsp_max => lpsp = g1 + lpsp_max
+            gas_violation=float(pop_G[i, 1]),
+            feasible=bool(pop_feas[i]),
+        ))
+    final_pop.sort(key=lambda r: (not r.feasible, r.npc))
 
     # Extract best feasible solution
     if res.X is None:
@@ -173,4 +215,5 @@ def run_nsga2(
         best=best_result,
         n_evals=res.algorithm.evaluator.n_eval,
         history=[],
+        final_population=final_pop,
     )

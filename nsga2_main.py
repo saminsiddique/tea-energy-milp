@@ -29,7 +29,7 @@ from config.nsga_parameters import (
 )
 from data.fetchers.saint_martin_data import SaintMartinDataProvider
 from optimization.ems_simulator import simulate, SimulationResult
-from optimization.nsga2_optimizer import run_nsga2
+from optimization.nsga2_optimizer import run_nsga2, NSGA2RunSummary
 
 
 # Bounds narrowed around paper Table 6 (≤ 15 % on every side) to keep NSGA-II
@@ -132,7 +132,32 @@ def stage1_fixed(data: dict, params: NSGASystemParams) -> SimulationResult:
     return result
 
 
-def stage2_nsga2(data: dict, params: NSGASystemParams) -> SimulationResult:
+def export_pareto_csv(population, filepath: str) -> None:
+    """Write the full final population to a CSV file."""
+    import csv
+    fields = ["rank", "feasible", "pv_kw", "wind_kw", "dg_kw",
+              "batt_kwh", "elz_kw", "gas_storage_m3",
+              "npc", "lpsp_pct", "gas_violation"]
+    with open(filepath, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fields)
+        w.writeheader()
+        for i, r in enumerate(population):
+            w.writerow({
+                "rank": i + 1,
+                "feasible": r.feasible,
+                "pv_kw": f"{r.pv_kw:.2f}",
+                "wind_kw": f"{r.wind_kw:.2f}",
+                "dg_kw": f"{r.dg_kw:.2f}",
+                "batt_kwh": f"{r.batt_kwh:.2f}",
+                "elz_kw": f"{r.elz_kw:.2f}",
+                "gas_storage_m3": f"{r.gas_storage_m3:.2f}",
+                "npc": f"{r.npc:.0f}",
+                "lpsp_pct": f"{r.lpsp * 100:.4f}",
+                "gas_violation": f"{r.gas_violation:.2f}",
+            })
+
+
+def stage2_nsga2(data: dict, params: NSGASystemParams, pareto_csv: str = "pareto_front.csv") -> NSGA2RunSummary:
     """Run NSGA-II sizing optimization with paper-centred bounds."""
     cfg = params.nsga2
     b = PAPER_TIGHT_BOUNDS
@@ -154,7 +179,21 @@ def stage2_nsga2(data: dict, params: NSGASystemParams) -> SimulationResult:
     print(f"\n  NSGA-II finished: {summary.n_evals} evaluations in "
           f"{elapsed/60:.1f} min ({elapsed/summary.n_evals*1000:.2f} ms/eval)")
     print_result(summary.best, "NSGA-II best solution vs paper")
-    return summary.best
+
+    pop = summary.final_population
+    n_total = len(pop)
+    n_feas = sum(1 for r in pop if r.feasible)
+    npc_vals = [r.npc for r in pop]
+    best_lpsp = min(r.lpsp for r in pop if r.feasible) if n_feas else float("nan")
+    print(f"\n  Population export:")
+    print(f"    Total members  : {n_total}")
+    print(f"    Feasible       : {n_feas}  ({n_feas/n_total*100:.0f}%)")
+    print(f"    NPC range      : ${min(npc_vals):,.0f} – ${max(npc_vals):,.0f}")
+    print(f"    Best LPSP      : {best_lpsp*100:.4f}%")
+    export_pareto_csv(pop, pareto_csv)
+    print(f"  Saved: {pareto_csv}")
+
+    return summary
 
 
 def main():
@@ -169,6 +208,8 @@ def main():
                         help="Override NSGA-II seed")
     parser.add_argument("--year", type=int, default=2022,
                         help="NASA POWER data year")
+    parser.add_argument("--pareto-csv", default="pareto_front.csv",
+                        help="Output CSV path for final population export")
     args = parser.parse_args()
 
     print("=" * 70)
@@ -203,7 +244,8 @@ def main():
         return
 
     # Stage 2 — NSGA-II free optimization
-    nsga_result = stage2_nsga2(data, params)
+    nsga_summary = stage2_nsga2(data, params, pareto_csv=args.pareto_csv)
+    nsga_result = nsga_summary.best
 
     # Final comparison
     print("\n" + "=" * 70)
